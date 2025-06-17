@@ -22,48 +22,50 @@ logging.basicConfig(
 
 SCORED_CSV = os.path.join(DATA_DIR, "scored_headlines.csv")
 
-def score_headlines(items: list[dict], min_score: int = 6) -> list[dict]:
-    """
-    Score hedge fund-relevant headlines based on potential market impact and virality.
-    Classify each as macro, political, or equity.
-    """
+def score_headlines(items: list[dict], min_score: int = 8) -> list[dict]:
     results = []
+    # Step 1: initial GPT relevance scoring
     for item in items:
-        headline = item.get("headline", "")
-        url = item.get("url", "")
-
-        # Classify into macro, political, equity
-        category = classify_headline_topic(headline)
-
-        # Prompt for scoring relevance to hedge fund investors
         prompt = (
-            f"As a hedge fund analyst, rate the market relevance of this headline on a scale from 1 to 10: '{headline}'\n"
-            f"Score based on how much it would affect macro positioning or equity trades."
+            f"As a hedge fund analyst focused on macro events, "
+            f"rate on 1–10 how much this headline affects global markets: '{item['headline']}'"
         )
-        response = generate_gpt_text(prompt)
-
+        raw = generate_gpt_text(prompt, max_tokens=10)
         try:
-            raw = float(response.strip())
-            score = int(round(raw))
-        except Exception:
+            score = min(10, max(1, int(round(float(raw.strip())))))
+        except:
             score = 1
+        item['score'] = score
+    # Filter by base threshold
+    scored = [i for i in items if i['score'] >= min_score]
 
-        score = max(1, min(score, 10))
+    if not scored:
+        return []
 
-        if score >= min_score:
-            timestamp = datetime.utcnow().isoformat()
-            record = {
+    # Step 2: GPT-powered trend detection within batch
+    batch = "\n".join(f"- {i['headline']}" for i in scored)
+    trend_prompt = (
+        "Here are recent headlines:\n" + batch +
+        "\n\nWhich top 2 reflect the most important macro themes right now? "
+        "Reply using the full headlines, one per line."
+    )
+    hot_lines = generate_gpt_text(trend_prompt, max_tokens=60).splitlines()
+    hot_set = set(h.strip() for h in hot_lines)
+
+    # Step 3: boost trending headlines
+    for item in scored:
+        headline = item['headline']
+        if headline in hot_set:
+            item['score'] = min(10, item['score'] + 2)
+        if item['score'] >= min_score:
+            _append_to_csv({
                 "headline": headline,
-                "url": url,
-                "ticker": category,  # repurposing ticker as macro/political/equity
-                "score": score,
-                "timestamp": timestamp,
-            }
-            _append_to_csv(record)
-            logging.info(f"Scored: {headline} → {score} ({category})")
-            results.append(record)
-        else:
-            logging.info(f"Skipped low-scoring headline: '{headline}' → {score}")
+                "url": item.get("url", ""),
+                "ticker": item.get("ticker", ""),
+                "score": item['score'],
+                "timestamp": item.get("timestamp", datetime.utcnow().isoformat()),
+            })
+            results.append(item)
 
     return results
 

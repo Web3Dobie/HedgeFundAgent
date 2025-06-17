@@ -8,3 +8,4 @@ openai
 tweepy
 python-dotenv
 feedparser
+spacy
