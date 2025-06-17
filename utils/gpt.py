@@ -10,6 +10,7 @@ from dotenv import load_dotenv
 from openai import OpenAI
 
 from .config import LOG_DIR
+from .stock_finder import get_relevant_tickers
 
 # Load environment variables
 load_dotenv()
@@ -28,6 +29,7 @@ client = OpenAI()
 def generate_gpt_tweet(prompt: str, temperature: float = 0.7) -> str:
     """
     Generate commentary with room to expand: target ~240 chars, allow up to 280.
+    Automatically adds relevant cashtags.
     """
     try:
         response = client.chat.completions.create(
@@ -35,21 +37,56 @@ def generate_gpt_tweet(prompt: str, temperature: float = 0.7) -> str:
             messages=[
                 {
                     "role": "system",
-                    "content":
-                        "You are a hedge fund manager. Provide sharp, insightful commentary "
-                        "in up to ~240 characters, max 280, using 2–3 sentences. "
-                        "No mid-sentence cuts and assume reader sees the headline."},
-                    ),
+                    "content": (
+                        "You are an expert hedge fund manager. Analyze the topic and return in format:\n"
+                        "THEME|COMMENTARY\n\n"
+                        "Requirements for commentary:\n"
+                        "- Provide sharp, data-driven market analysis\n"
+                        "- Include specific market implications\n"
+                        "- Focus on actionable investment insights\n"
+                        "- Target ~240 chars (max 280)\n"
+                        "- Theme should be 1-3 key words\n"
+                        "\nExample format:\n"
+                        "HOMEBUILDERS|Housing starts plunge 15% to 3-year low as mortgage rates hit 7%. "
+                        "Seeing inventory buildup and margin pressure for builders. "
+                        "Watch for potential consolidation in smaller players."
+                    )
+                },
                 {"role": "user", "content": prompt},
             ],
-            max_tokens=160,  # roughly 240 - 280 characters
+            max_tokens=160,
             temperature=temperature,
         )
-        core = response.choices[0].message.content.strip()
-        # Enforce limit of 280 chars, trimming cleanly
-        if len(core) > 280:
-            core = core[:280].rsplit(" ", 1)[0]
-        return core
+        
+        result = response.choices[0].message.content.strip()
+
+        # Handle malformed responses
+        if "|" not in result:
+            logging.warning("Malformed GPT response, no theme separator found")
+            return result[:280]
+            
+        theme, commentary = result.split("|", 1)
+        commentary = commentary.strip()
+        
+        # Get relevant tickers
+        tickers = get_relevant_tickers(theme.strip())
+        
+        # Start with commentary (allow full 280 chars)
+        final_tweet = commentary
+        
+        # Trim commentary if over 280 (clean break at word boundary)
+        if len(final_tweet) > 280:
+            final_tweet = final_tweet[:280].rsplit(" ", 1)[0]
+        
+        # Add tickers separately (no length restriction)
+        if tickers:
+            final_tweet += "\n\n" + " ".join(tickers)
+        
+        # Add NFA disclaimer (always add, no length restriction)
+        final_tweet += "\n\nThis is my opinion. Not financial advice."
+        
+        return final_tweet.strip()
+        
     except Exception as e:
         logging.error(f"Error generating GPT tweet: {e}")
         return ""
