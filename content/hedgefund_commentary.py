@@ -53,7 +53,7 @@ def post_hedgefund_comment():
         logger.warning("No recent headlines to comment on.")
         return
 
-    headline = random.choice(recent)
+    headline = max(recent, key=lambda r: int(r["score"]))
     category = classify_headline(headline["headline"])
     prompt = build_prompt(headline["headline"], category)
 
