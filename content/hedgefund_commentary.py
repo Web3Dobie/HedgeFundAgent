@@ -57,7 +57,6 @@ def post_hedgefund_comment():
     category = classify_headline(headline["headline"])
     prompt = build_prompt(headline["headline"], category)
 
-    # Step 1: Generate the core insight (≤100 chars)
     core = generate_gpt_tweet(prompt)
 
     if core:

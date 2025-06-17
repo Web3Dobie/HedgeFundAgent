@@ -27,28 +27,34 @@ client = OpenAI()
 
 def generate_gpt_tweet(prompt: str, temperature: float = 0.7) -> str:
     """
-    1️⃣ Use GPT to create a concise analysis (<=100 chars).
-    2️⃣ Return only core content; tagging comes later.
+    Generate 2-3 sentence commentary with up to ~200 characters.
     """
     try:
         response = client.chat.completions.create(
             model="gpt-3.5-turbo",
             messages=[
-                {"role": "system", "content":
-                    "You are a hedge fund investor. Provide sharp commentary under 100 characters, "
-                    "1–2 sentences max. Assume reader sees the headline—dive straight into insight."},
+                {
+                    "role": "system",
+                    "content": (
+                        "You are a hedge fund investor. Provide sharp, insightful commentary "
+                        "in 2–3 sentences and keep it under 200 characters. "
+                        "Assume the reader sees the headline—jump straight into analysis."
+                    ),
+                },
                 {"role": "user", "content": prompt},
             ],
-            max_tokens=60,
+            max_tokens=125,  # approx. 200 characters
             temperature=temperature,
         )
-        tweet = response.choices[0].message.content.strip()
-        if len(tweet) > 100:
-            tweet = tweet[:100].rsplit(" ", 1)[0]
-        return tweet
+        core = response.choices[0].message.content.strip()
+        # Trim to 200 chars if needed, without breaking mid-word
+        if len(core) > 200:
+            core = core[:200].rsplit(" ", 1)[0]
+        return core
     except Exception as e:
         logging.error(f"Error generating GPT tweet: {e}")
         return ""
+
 
 def generate_gpt_thread(
     prompt: str, max_parts: int = 5, delimiter: str = "---", max_tokens: int = 1500
