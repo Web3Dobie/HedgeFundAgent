@@ -27,7 +27,7 @@ client = OpenAI()
 
 def generate_gpt_tweet(prompt: str, temperature: float = 0.7) -> str:
     """
-    Generate 2-3 sentence commentary with up to ~200 characters.
+    Generate commentary with room to expand: target ~240 chars, allow up to 280.
     """
     try:
         response = client.chat.completions.create(
@@ -35,21 +35,20 @@ def generate_gpt_tweet(prompt: str, temperature: float = 0.7) -> str:
             messages=[
                 {
                     "role": "system",
-                    "content": (
-                        "You are a hedge fund investor. Provide sharp, insightful commentary "
-                        "in 2–3 sentences and keep it under 200 characters. "
-                        "Assume the reader sees the headline—jump straight into analysis."
+                    "content":
+                        "You are a hedge fund manager. Provide sharp, insightful commentary "
+                        "in up to ~240 characters, max 280, using 2–3 sentences. "
+                        "No mid-sentence cuts and assume reader sees the headline."},
                     ),
-                },
                 {"role": "user", "content": prompt},
             ],
-            max_tokens=125,  # approx. 200 characters
+            max_tokens=160,  # roughly 240 - 280 characters
             temperature=temperature,
         )
         core = response.choices[0].message.content.strip()
-        # Trim to 200 chars if needed, without breaking mid-word
-        if len(core) > 200:
-            core = core[:200].rsplit(" ", 1)[0]
+        # Enforce limit of 280 chars, trimming cleanly
+        if len(core) > 280:
+            core = core[:280].rsplit(" ", 1)[0]
         return core
     except Exception as e:
         logging.error(f"Error generating GPT tweet: {e}")
