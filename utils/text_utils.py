@@ -6,15 +6,28 @@ Text utility functions for tweet content:
 """
 
 import re
+import spacy
+
+_NLP = spacy.load("en_core_web_sm")
+
+# Load spaCy model
+import spacy
+_NLP = spacy.load("en_core_web_sm")
 
 def classify_headline_topic(headline: str) -> str:
     """
-    Classify headline as 'macro', 'political', or 'equity'.
+    Classify headline as 'equity', 'macro', or 'political'.
+    If spaCy detects an organization (ORG), label as equity.
     """
+    doc = _NLP(headline)
+    for ent in doc.ents:
+        if ent.label_ == "ORG":
+            return "equity"
+
     h = headline.lower()
-    political_keywords = ["trump", "election", "senate", "vote", "white house", "parliament"]
-    macro_keywords = ["inflation", "rate hike", "interest rate", "fed", "ecb", "central bank", "gdp", "unemployment", "trade agreement", "bonds", "treasury"]
-    equity_keywords = ["earnings", "ipo", "stock", "dividend", "guidance", "merger", "acquisition", "ceo", "layoffs"]
+    political_keywords = ["putin", "trump", "election", "senate", "vote", "white house", "parliament"]
+    macro_keywords     = ["inflation", "rate hike", "interest rate", "fed", "ecb", "central bank", "gdp", "unemployment", "trade agreement"]
+    equity_keywords    = ["earnings", "ipo", "stock", "dividend", "guidance", "merger", "acquisition", "ceo", "layoffs"]
 
     if any(kw in h for kw in political_keywords):
         return "political"
@@ -23,7 +36,8 @@ def classify_headline_topic(headline: str) -> str:
     elif any(kw in h for kw in equity_keywords):
         return "equity"
     else:
-        return "macro"  # safe fallback
+        return "macro"
+
 
 def insert_cashtags(text: str) -> str:
     """
