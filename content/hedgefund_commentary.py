@@ -61,9 +61,9 @@ def post_hedgefund_comment():
     core = generate_gpt_tweet(prompt)
 
     if core:
-        # Step 2: Append cashtags and mentions AFTER core content
-        tags = insert_cashtags(insert_mentions(""))
-        tweet = f"{core} {tags}".strip()
+        tagged_content = insert_mentions(core)       # add mentions to core
+        tagged_content = insert_cashtags(tagged_content)  # then add cashtags
+        tweet = f"{core} {tagged_content[len(core):].strip()}"
         post_tweet(tweet, category=category)
     else:
         logger.error("GPT did not return a tweet.")

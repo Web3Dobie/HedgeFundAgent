@@ -63,7 +63,7 @@ def insert_mentions(text: str) -> str:
 
         # Macro (grouped by signal type)
         "trade agreement": "@realDonaldTrump" "@SecScottBessent",
-        "gdp": "@realDonaldTrump" "@SecScottBessent",
+        "gdp": "@realDonaldTrump" "@SecScottBessent" "@JeromePowell",
         "unemployment": "@realDonaldTrump" "@SecScottBessent",
         "inflation": "@federalreserve @JeromePowell",
         "rate hike": "@federalreserve @JeromePowell",
