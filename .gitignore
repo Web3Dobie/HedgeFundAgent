@@ -1,0 +1,41 @@
+# Python
+__pycache__/
+*.py[cod]
+*.so
+*.egg-info/
+*.pyd
+
+# Logs and data
+*.log
+*.csv
+*.db
+data/*.csv
+logs/
+backup/
+
+# Environment
+.env
+.venv/
+env/
+venv/
+.idea/
+.DS_Store
+
+# Jupyter/IPython
+.ipynb_checkpoints
+
+# System
+Thumbs.db
+ehthumbs.db
+
+# VSCode
+.vscode/
+
+# Pip cache or wheels
+*.whl
+pip-wheel-metadata/
+
+# Pytest or coverage
+htmlcov/
+.tox/
+.coverage

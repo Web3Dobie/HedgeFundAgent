@@ -1,0 +1,10 @@
+matplotlib
+pandas
+pandas-ta
+requests
+schedule
+notion-client
+openai
+tweepy
+python-dotenv
+feedparser
