@@ -38,6 +38,10 @@ schedule.every().day.at("22:00").do(post_hedgefund_deep_dive)
 schedule.every().sunday.at("23:50").do(rotate_logs)
 
 # --- Run Loop ---
-while True:
-    schedule.run_pending()
-    time.sleep(30)
+try:
+    while True:
+        schedule.run_pending()
+        time.sleep(30)
+except KeyboardInterrupt:
+    logger.info("Scheduler stopped by user (SIGINT)")
+    sys.exit(0)
