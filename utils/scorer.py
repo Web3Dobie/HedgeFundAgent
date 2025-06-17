@@ -23,12 +23,25 @@ logging.basicConfig(
 SCORED_CSV = os.path.join(DATA_DIR, "scored_headlines.csv")
 
 def score_headlines(items: list[dict], min_score: int = 8) -> list[dict]:
-    results = []
-    # Step 1: initial GPT relevance scoring
+    """
+    Score headlines using GPT with enhanced scoring system.
+    Returns list of headlines scored >= min_score.
+    """
+    # Step 1: Score all headlines first with more detailed criteria
+    scored_items = []
     for item in items:
         prompt = (
-            f"As a hedge fund analyst focused on macro events, "
-            f"rate on 1–10 how much this headline affects global markets: '{item['headline']}'"
+            f"As a hedge fund analyst, rate this headline's market impact from 1-10:\n"
+            f"'{item['headline']}'\n\n"
+            f"Consider these factors:\n"
+            f"- Immediate market moving potential (price action)\n"
+            f"- Broader economic implications\n"
+            f"- Policy/regulatory impact\n"
+            f"- Sector-wide effects\n"
+            f"- Geopolitical significance\n"
+            f"- Trading volume implications\n\n"
+            f"Score 8-10 for headlines that combine multiple major factors.\n"
+            f"Return only the number."
         )
         raw = generate_gpt_text(prompt, max_tokens=10)
         try:
@@ -36,27 +49,33 @@ def score_headlines(items: list[dict], min_score: int = 8) -> list[dict]:
         except:
             score = 1
         item['score'] = score
-    # Filter by base threshold
-    scored = [i for i in items if i['score'] >= min_score]
+        scored_items.append(item)
 
-    if not scored:
-        return []
-
-    # Step 2: GPT-powered trend detection within batch
-    batch = "\n".join(f"- {i['headline']}" for i in scored)
+    # Step 2: Enhanced trend detection
+    batch = "\n".join(f"- {i['headline']}" for i in scored_items)
     trend_prompt = (
-        "Here are recent headlines:\n" + batch +
-        "\n\nWhich top 2 reflect the most important macro themes right now? "
-        "Reply using the full headlines, one per line."
+        "From these headlines, identify the 3 most significant market-moving stories.\n"
+        "Consider combinations of:\n"
+        "- Major policy changes\n"
+        "- Geopolitical tensions\n"
+        "- Significant market shifts\n"
+        "- Economic data surprises\n"
+        "- Cross-asset implications\n\n"
+        f"{batch}\n\n"
+        "Reply with exact headlines, one per line."
     )
-    hot_lines = generate_gpt_text(trend_prompt, max_tokens=60).splitlines()
+    hot_lines = generate_gpt_text(trend_prompt, max_tokens=200).splitlines()
     hot_set = set(h.strip() for h in hot_lines)
 
-    # Step 3: boost trending headlines
-    for item in scored:
+    # Step 3: Apply enhanced boost for trending themes
+    results = []
+    for item in scored_items:
         headline = item['headline']
+        # Boost score for trending themes (+3 instead of +2)
         if headline in hot_set:
-            item['score'] = min(10, item['score'] + 2)
+            item['score'] = min(10, item['score'] + 3)
+            
+        # Only include items meeting minimum score
         if item['score'] >= min_score:
             _append_to_csv({
                 "headline": headline,
