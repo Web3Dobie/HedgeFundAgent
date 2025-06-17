@@ -29,15 +29,18 @@ BACKUP_DIR = os.path.join(BASE_DIR, "backup")
 RSS_FEED_URLS = {
     "reuters-politics": "http://feeds.reuters.com/Reuters/PoliticsNews",
     "reuters-business": "http://feeds.reuters.com/reuters/businessNews",
+    "reuters-markets":  "http://feeds.reuters.com/reuters/marketsNews",
     "cnbc-top":         "https://www.cnbc.com/id/100003114/device/rss/rss.html",
     "marketwatch":      "https://feeds.marketwatch.com/marketwatch/topstories/",
     "ft":               "https://www.ft.com/?format=rss",
-    "bloomberg-etf":    "https://www.bloomberg.com/feed/podcast/etf-report.xml",
-    "zerohedge":        "https://cms.zerohedge.com/fullrss2.xml",
     "bloomberg-markets":"https://feeds.bloomberg.com/markets/news.rss",
     "bloomberg-poli":   "https://feeds.bloomberg.com/politics/news.rss",
     "bloomberg-tech":   "https://feeds.bloomberg.com/technology/news.rss",
     "bloomberg-wealth": "https://feeds.bloomberg.com/wealth/news.rss",
     "bloomberg-eco":    "https://feeds.bloomberg.com/economics/news.rss",
-    "prnnews":          "https://www.prnewswire.com/rss/news-releases-list.rss"
+    "prnnews":          "https://www.prnewswire.com/rss/",
+    "zerohedge-gen":    "https://rss.feedspot.com/zerohedge_rss_feeds.xml",
+    "zerohedge-econ":   "https://rss.feedspot.com/zerohedge-economics.xml",
+    "zerohedge-markets":"https://rss.feedspot.com/zerohedge-markets.xml",
+    "zerohedge-geopol": "https://rss.feedspot.com/zerohedge-geopolitical.xml"
 }
