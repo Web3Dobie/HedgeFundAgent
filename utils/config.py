@@ -30,9 +30,10 @@ RSS_FEED_URLS = {
     # Reuters feeds (updated to new format)
     # "reuters-business": "https://www.reuters.com/business/rss",
     # "reuters-markets": "https://www.reuters.com/finance/markets",
+    "reuters": "https://feeds.reuters.com/reuters/businessNews",
 
     # CNBC feeds (alternate URLs)
-    # "cnbc-latest": "https://feeds.feedspot.com/cnbc_latest.rss",  # example
+    "cnbc": "https://www.cnbc.com/id/100003114/device/rss/rss.html",
     
     # Working feeds (unchanged)
     "marketwatch": "https://feeds.marketwatch.com/marketwatch/topstories/",
@@ -56,4 +57,6 @@ RSS_FEED_URLS = {
     "benzinga-general": "https://www.benzinga.com/feed",
     "business-insider": "https://markets.businessinsider.com/rss/news",
     "tradingview-news": "https://www.tradingview.com/feed/",
+    "yahoo_finance": "https://finance.yahoo.com/news/rssindex",
+    "marketwatch": "https://www.marketwatch.com/rss/topstories",
 }
