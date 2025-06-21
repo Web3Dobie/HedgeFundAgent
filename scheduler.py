@@ -25,7 +25,7 @@ print("ðŸ•’ Hedge Fund Investor Scheduler is live. Waiting for scheduled postsâ€
 sys.stdout.flush()
 
 # --- Ingest Headlines Hourly ---
-schedule.every().hour.at(":45").do(fetch_and_score_headlines)
+schedule.every().hour.at(":30").do(fetch_and_score_headlines)
 
 # --- Daily Hedge Fund Tweets ---
 for hour in range(9, 20):  # 9am to 7pm inclusive

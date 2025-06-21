@@ -24,7 +24,7 @@ logging.basicConfig(
 SCORED_FILE = os.path.join(DATA_DIR, "scored_headlines.csv")
 
 
-def fetch_and_score_headlines(limit=25):
+def fetch_and_score_headlines(limit=1000):
     """
     Fetch via RSS, skip already seen, then score new headlines.
     """

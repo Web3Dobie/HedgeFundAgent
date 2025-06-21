@@ -90,9 +90,12 @@ def score_headlines(items: list[dict], min_score: int = 8) -> list[dict]:
 
 def _append_to_csv(record: dict):
     try:
-        header = ["score", "headline", "url", "ticker", "timestamp"]
+        header = ["score", "headline", "url", "ticker", "timestamp", "used_in_hourly_commentary"]
         os.makedirs(DATA_DIR, exist_ok=True)
         write_header = not os.path.exists(SCORED_CSV)
+
+        # Ensure default for the new column
+        record.setdefault("used_in_hourly_commentary", "False")
 
         with open(SCORED_CSV, "a", newline="", encoding="utf-8") as f:
             writer = csv.DictWriter(f, fieldnames=header)
