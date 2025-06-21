@@ -3,7 +3,6 @@
 # Only import modules used by the hedge fund agent
 
 from .gpt import (
-    client,
     generate_gpt_text,
     generate_gpt_thread,
     generate_gpt_tweet,
