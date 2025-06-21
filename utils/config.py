@@ -22,6 +22,9 @@ AZURE_RESOURCE_NAME = os.getenv("AZURE_RESOURCE_NAME")
 TG_BOT_TOKEN = os.getenv("TG_BOT_TOKEN")
 TG_CHAT_ID   = os.getenv("TG_CHAT_ID")
 
+# Finnhub API
+FINNHUB_API_KEY = os.getenv("FINNHUB_API_KEY")
+
 # Local directories
 BASE_DIR  = os.path.dirname(os.path.dirname(__file__))
 DATA_DIR  = os.path.join(BASE_DIR, "data")
