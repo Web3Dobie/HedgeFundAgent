@@ -15,7 +15,7 @@ BOT_USER_ID             = os.getenv("X_BOT_USER_ID")
 # Azure OpenAI credentials
 AZURE_OPENAI_API_KEY = os.getenv("AZURE_OPENAI_API_KEY")
 AZURE_DEPLOYMENT_ID = os.getenv("AZURE_DEPLOYMENT_ID")
-AZURE_API_VERSION = os.getenv("AZURE_API_VERSION", "2024-02-15-preview")
+AZURE_API_VERSION = os.getenv("AZURE_API_VERSION")
 AZURE_RESOURCE_NAME = os.getenv("AZURE_RESOURCE_NAME")
 
 # Telegram Logging
