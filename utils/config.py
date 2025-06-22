@@ -25,6 +25,9 @@ TG_CHAT_ID   = os.getenv("TG_CHAT_ID")
 # Finnhub API
 FINNHUB_API_KEY = os.getenv("FINNHUB_API_KEY")
 
+# Alpha Vantage API
+ALPHA_VANTAGE_API_KEY = os.getenv("ALPHA_VANTAGE_API_KEY")
+
 # Local directories
 BASE_DIR  = os.path.dirname(os.path.dirname(__file__))
 DATA_DIR  = os.path.join(BASE_DIR, "data")

@@ -62,7 +62,7 @@ def make_gpt_request(payload: dict, deployment_id: str) -> dict:
             f"Failed GPT request: HTTP {response.status_code}, Response: {response.text}"
         )
         return {}
-    Except Exception as e:
+    except Exception as e:
         logging.error(f"Exception during GPT request: {e}")
         return {}
 
@@ -177,7 +177,7 @@ def generate_gpt_thread(prompt: str, max_parts: int = 5, delimiter: str = "---",
 
             formatted_parts.append(formatted_part)
 
-       return formatted_parts
+        return formatted_parts
 
     except Exception as e:
         logging.error(f"Error generating GPT thread: {e}")

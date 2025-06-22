@@ -64,6 +64,29 @@ def get_next_category():
     last_used_category = next_category
     return next_category
 
+def fetch_market_price(ticker: str) -> float:
+    """
+    Fetch market price for a given ticker. Determines whether the asset is an equity or Brent crude oil
+    and calls the appropriate API.
+
+    Args:
+        ticker (str): Ticker symbol (e.g., "AAPL" for stocks or "BRENT" for Brent crude oil).
+        
+    Returns:
+        float: Last available price of the asset, or None if unavailable.
+    """
+    # Check if the ticker corresponds to Brent crude oil
+    if ticker.upper() == "BRENT":
+        return get_last_brent_price(api_key=ALPHA_VANTAGE_API_KEY)
+    
+    # Otherwise, assume it's an equity symbol and fetch intraday data
+    intraday_data = intraday_ticker_data_equities(symbol=ticker)
+    if intraday_data and "price" in intraday_data:
+        return intraday_data["price"]
+    
+    logging.warning(f"Price not found for ticker {ticker}")
+    return None
+
 def post_hedgefund_comment():
     logger.info("🧠 Generating hedge fund investor comment")
 
@@ -109,6 +132,18 @@ def post_hedgefund_comment():
     core = generate_gpt_tweet(prompt)
 
     if core:
+        # Extract base cashtags from the commentary
+        cashtags = extract_cashtags(core)
+        logger.info(f"Identified cashtags: {cashtags}")
+
+        # Fetch real-time market price data for cashtags
+        prices = {tag: fetch_market_price(tag.strip("$")) for tag in cashtags}
+
+        # Update the GPT prompt with price information
+        updated_prompt = enhance_prompt_with_prices(prompt, prices)
+        core = generate_gpt_tweet(updated_prompt)  # Regenerate commentary with price integration
+
+        # Insert mentions/cashtags into final tweet
         tagged = insert_mentions(core)
         tagged = insert_cashtags(tagged)
         tweet = f"{core} {tagged[len(core):].strip()}"
