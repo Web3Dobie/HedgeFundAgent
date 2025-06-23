@@ -21,9 +21,10 @@ logging.basicConfig(
 )
 
 SCORED_CSV = os.path.join(DATA_DIR, "scored_headlines.csv")
-model_name = "gpt-4o"  # Use the latest model for scoring
 
 def score_headlines(items: list[dict], min_score: int = 8) -> list[dict]:
+    logging.info(f"SCORED_CSV full path: {os.path.abspath(SCORED_CSV)}")
+
     """
     Score headlines using GPT with enhanced scoring system.
     Returns list of headlines scored >= min_score.
@@ -37,7 +38,7 @@ def score_headlines(items: list[dict], min_score: int = 8) -> list[dict]:
         item.setdefault("ticker", classify_headline_topic(item.get("headline", "")))
         item.setdefault("url", "")
         item.setdefault("timestamp", datetime.utcnow().isoformat())
-        scored_items.append(item)
+        
         # Generate prompt for GPT
         prompt = (
             f"As a hedge fund analyst, rate this headline's market impact from 1-10:\n"
@@ -53,7 +54,7 @@ def score_headlines(items: list[dict], min_score: int = 8) -> list[dict]:
             f"Return only the number."
         )
         # Generate GPT response
-        raw = generate_gpt_text(prompt, model_name=model_name, max_tokens=10)
+        raw = generate_gpt_text(prompt, max_tokens=10)
 
         if not raw or raw.strip() == "":
             logging.error(f"GPT returned an empty response for headline: '{item['headline']}'")
@@ -63,6 +64,7 @@ def score_headlines(items: list[dict], min_score: int = 8) -> list[dict]:
             try:
                 # Parse and constrain score between 1 and 10
                 item['score'] = parse_score(raw)  # Assume parse_score is implemented correctly
+                logging.info(f"Headline scored: {item['headline']} | Score: {item['score']}")
             except Exception as e:
                 logging.error(f"Failed to parse GPT response for headline: '{item['headline']}', Error: {e}")
                 item['score'] = 1  # Default score for parsing failure
@@ -74,8 +76,6 @@ def score_headlines(items: list[dict], min_score: int = 8) -> list[dict]:
 
     logging.info(f"Total headlines processed: {len(items)}")
     logging.info(f"Total GPT failures: {failed_count}")
-
-    return scored_items
 
     # Step 2: Enhanced trend detection
     batch = "\n".join(f"- {i['headline']}" for i in scored_items)
@@ -90,7 +90,7 @@ def score_headlines(items: list[dict], min_score: int = 8) -> list[dict]:
         f"{batch}\n\n"
         "Reply with exact headlines, one per line."
     )
-    hot_lines = generate_gpt_text(trend_prompt, model_name = model_name, max_tokens=200).splitlines()
+    hot_lines = generate_gpt_text(trend_prompt, max_tokens=200).splitlines()
     hot_set = set(h.strip() for h in hot_lines)
 
     # Step 3: Apply enhanced boost for trending themes
@@ -100,6 +100,7 @@ def score_headlines(items: list[dict], min_score: int = 8) -> list[dict]:
         # Boost score for trending themes (+3 instead of +2)
         if headline in hot_set:
             item['score'] = min(10, item['score'] + 3)
+            logging.info(f"Headline boosted: {headline} | Boosted score: {item['score']}")
             
         # Only include items meeting minimum score
         if item['score'] >= min_score:
@@ -132,22 +133,26 @@ def parse_score(raw_response: str) -> int:
 
 
 def _append_to_csv(record: dict):
+    logging.info(f"[DEBUG] Writing to {os.path.abspath(SCORED_CSV)}: {record}")
+
     try:
         header = ["score", "headline", "url", "ticker", "timestamp", "used_in_hourly_commentary"]
         os.makedirs(DATA_DIR, exist_ok=True)
         write_header = not os.path.exists(SCORED_CSV)
 
-        # Ensure default for the new column
         record.setdefault("used_in_hourly_commentary", "False")
 
         with open(SCORED_CSV, "a", newline="", encoding="utf-8") as f:
             writer = csv.DictWriter(f, fieldnames=header)
             if write_header:
+                logging.info(f"Writing header to {SCORED_CSV}")
                 writer.writeheader()
             writer.writerow(record)
+            logging.info(f"Appended to CSV: {record}")
     except Exception as e:
         logging.error(f"Failed to write to CSV: {e}")
         raise
+
 
 def write_headlines(records: list[dict]):
     for rec in records:

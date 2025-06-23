@@ -6,6 +6,7 @@ Logs errors to a centralized log file and uses HTTP requests for API calls.
 import logging
 import os
 import requests
+import json
 from dotenv import load_dotenv
 from openai import OpenAI
 from typing import List
@@ -41,13 +42,12 @@ def construct_azure_openai_url() -> str:
     
     :return: Fully constructed base URL.
     """
-    return f"https://{AZURE_RESOURCE_NAME}.openai.azure.com/openai/v1/chat/completions"
+    return f"https://{AZURE_RESOURCE_NAME}.openai.azure.com/openai/deployments/{AZURE_DEPLOYMENT_ID}/chat/completions?api-version={AZURE_API_VERSION}"
    
-def make_gpt_request(payload: dict, model_name: str) -> dict:
+def make_gpt_request(payload: dict) -> dict:
     """
     Sends a request to Azure OpenAI and returns the response.
     :param payload: Request payload for generating text.
-    :param model_name: Model name for the GPT model.
     :return: Response JSON or empty dictionary in case of error.
     """
     url = construct_azure_openai_url()
@@ -56,26 +56,24 @@ def make_gpt_request(payload: dict, model_name: str) -> dict:
         "Authorization": f"Bearer {AZURE_OPENAI_API_KEY}",
     }
 
-    payload["model"] = model_name
-
-    try:    
+    try:
+        logging.info(f"Sending payload: {json.dumps(payload)}")
         response = requests.post(url, headers=headers, json=payload)
+        logging.info(f"Received response: {response.text}")
 
-        # Log and handle unsuccessful responses
         if response.status_code != 200:
-            return response.json()
+            logging.error(f"Failed GPT request: HTTP {response.status_code}, Response: {response.text}")
+            return {}
 
-            
-        logging.error(
-            f"Failed GPT request: HTTP {response.status_code}, Response: {response.text}"
-        )
-        response.raise_for_status()  # Raise an error for bad responses
+        # Parse and return JSON
+        return response.json()
+
     except Exception as e:
         logging.error(f"Exception during GPT request: {e}")
         return {}
 
 
-def generate_gpt_tweet(prompt: str, model_name: str,temperature: float = 0.7) -> str:
+def generate_gpt_tweet(prompt: str, temperature: float = 0.7) -> str:
     """
     Generate commentary with room to expand: target ~240 chars, allow up to 280.
     Automatically adds relevant cashtags.
@@ -107,7 +105,7 @@ def generate_gpt_tweet(prompt: str, model_name: str,temperature: float = 0.7) ->
     }
 
     try:
-        response = make_gpt_request(payload, model_name)
+        response = make_gpt_request(payload)
         result = response.get("choices", [{}])[0].get("message", {}).get("content", "").strip()
 
         if not result or "|" not in result:
@@ -129,7 +127,7 @@ def generate_gpt_tweet(prompt: str, model_name: str,temperature: float = 0.7) ->
         logging.error(f"Error generating GPT tweet: {e}")
         return ""
 
-def generate_gpt_thread(prompt: str, model_name: str, max_parts: int = 5, delimiter: str = "---", max_tokens: int = 1800) -> List[str]:
+def generate_gpt_thread(prompt: str, max_parts: int = 5, delimiter: str = "---", max_tokens: int = 1800) -> List[str]:
     """
     Generate a multi-part Twitter thread using GPT with numbered parts and disclaimer at the end of the last part.
 
@@ -159,7 +157,7 @@ def generate_gpt_thread(prompt: str, model_name: str, max_parts: int = 5, delimi
     }
 
     try:
-        response = make_gpt_request(payload, model_name)
+        response = make_gpt_request(payload)
         raw_content = response.get("choices", [{}])[0].get("message", {}).get("content", "").strip()
         parts = raw_content.split(delimiter) if delimiter in raw_content else raw_content.split("\n\n")
 
@@ -185,11 +183,10 @@ def generate_gpt_thread(prompt: str, model_name: str, max_parts: int = 5, delimi
         return []
 
 
-def analyze_market_moves(news_data: dict, model_name: str) -> dict:
+def analyze_market_moves(news_data: dict,) -> dict:
     """
     Uses GPT via Azure OpenAI to analyze market movements based on news headlines.
     :param news_data: Dictionary with gainers and losers news articles.
-    :param deployment_name: Deployment name for Azure OpenAI.
     :return: Dictionary with GPT-generated insights.
     """
     insights = {}
@@ -205,15 +202,14 @@ def analyze_market_moves(news_data: dict, model_name: str) -> dict:
 
 
 
-def generate_gpt_text(prompt: str, model_name: str, max_tokens: int = 1800) -> str:
+def generate_gpt_text(prompt: str, max_tokens: int = 1800) -> str:
     """
     Generate longer-form text (e.g., Substack article or blog post) using GPT.
 
     Args:
         prompt (str): User's input topic or query.
         max_tokens (int): Maximum tokens allowed in the GPT response (default: 1800).
-        model (str): Model to use for generation (default: "gpt-4").
-
+        
     Returns:
         str: Generated long-form text.
     """
@@ -224,7 +220,7 @@ def generate_gpt_text(prompt: str, model_name: str, max_tokens: int = 1800) -> s
     }
 
     try:
-        response = make_gpt_request(payload, model_name)
+        response = make_gpt_request(payload)
         return response.get("choices", [{}])[0].get("message", {}).get("content", "").strip()
 
     except Exception as e:
