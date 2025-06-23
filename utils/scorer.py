@@ -21,6 +21,7 @@ logging.basicConfig(
 )
 
 SCORED_CSV = os.path.join(DATA_DIR, "scored_headlines.csv")
+model_name = "gpt-4o"  # Use the latest model for scoring
 
 def score_headlines(items: list[dict], min_score: int = 8) -> list[dict]:
     """
@@ -29,7 +30,15 @@ def score_headlines(items: list[dict], min_score: int = 8) -> list[dict]:
     """
     # Step 1: Score all headlines first with more detailed criteria
     scored_items = []
+    
+    failed_count=0
     for item in items:
+        item.setdefault("score", 1)  # Default score if not set
+        item.setdefault("ticker", classify_headline_topic(item.get("headline", "")))
+        item.setdefault("url", "")
+        item.setdefault("timestamp", datetime.utcnow().isoformat())
+        scored_items.append(item)
+        # Generate prompt for GPT
         prompt = (
             f"As a hedge fund analyst, rate this headline's market impact from 1-10:\n"
             f"'{item['headline']}'\n\n"
@@ -43,13 +52,30 @@ def score_headlines(items: list[dict], min_score: int = 8) -> list[dict]:
             f"Score 8-10 for headlines that combine multiple major factors.\n"
             f"Return only the number."
         )
-        raw = generate_gpt_text(prompt, max_tokens=10)
-        try:
-            score = min(10, max(1, int(round(float(raw.strip())))))
-        except:
-            score = 1
-        item['score'] = score
-        scored_items.append(item)
+        # Generate GPT response
+        raw = generate_gpt_text(prompt, model_name=model_name, max_tokens=10)
+
+        if not raw or raw.strip() == "":
+            logging.error(f"GPT returned an empty response for headline: '{item['headline']}'")
+            failed_count += 1
+            item['score'] = 1  # Assign default score for empty GPT response
+        else:
+            try:
+                # Parse and constrain score between 1 and 10
+                item['score'] = parse_score(raw)  # Assume parse_score is implemented correctly
+            except Exception as e:
+                logging.error(f"Failed to parse GPT response for headline: '{item['headline']}', Error: {e}")
+                item['score'] = 1  # Default score for parsing failure
+                failed_count += 1
+
+        # Append item with updated score to the result list (only if >= min_score)
+        if item['score'] >= min_score:
+            scored_items.append(item)
+
+    logging.info(f"Total headlines processed: {len(items)}")
+    logging.info(f"Total GPT failures: {failed_count}")
+
+    return scored_items
 
     # Step 2: Enhanced trend detection
     batch = "\n".join(f"- {i['headline']}" for i in scored_items)
@@ -64,7 +90,7 @@ def score_headlines(items: list[dict], min_score: int = 8) -> list[dict]:
         f"{batch}\n\n"
         "Reply with exact headlines, one per line."
     )
-    hot_lines = generate_gpt_text(trend_prompt, max_tokens=200).splitlines()
+    hot_lines = generate_gpt_text(trend_prompt, model_name = model_name, max_tokens=200).splitlines()
     hot_set = set(h.strip() for h in hot_lines)
 
     # Step 3: Apply enhanced boost for trending themes
@@ -87,6 +113,23 @@ def score_headlines(items: list[dict], min_score: int = 8) -> list[dict]:
             results.append(item)
 
     return results
+
+def parse_score(raw_response: str) -> int:
+    """
+    Parse the score returned by GPT, ensuring it's between 1 and 10.
+    Args:
+        raw_response (str): Raw GPT response.
+    Returns:
+        int: Parsed score (default to 1 for failures).
+    """
+    try:
+        # Attempt to parse numeric value
+        score = float(raw_response.strip())
+        return min(10, max(1, int(round(score))))
+    except ValueError:
+        logging.error(f"Failed to parse score from response: '{raw_response}'")
+        return 1  # Default score on failure
+
 
 def _append_to_csv(record: dict):
     try:

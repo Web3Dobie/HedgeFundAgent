@@ -33,6 +33,7 @@ logging.basicConfig(
 )
 # Set up environment variables for OpenAI
 AZURE_RESOURCE_NAME = os.getenv("AZURE_RESOURCE_NAME", AZURE_RESOURCE_NAME)
+model_name="gpt-4o"  # Default model for Azure OpenAI
 
 def construct_azure_openai_url() -> str:
     """
