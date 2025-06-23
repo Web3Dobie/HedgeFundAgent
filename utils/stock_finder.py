@@ -1,17 +1,27 @@
 """
 Utility for finding relevant stock tickers based on keywords/themes using Azure OpenAI Service.
 """
-
+import os
 import logging
 import re
 import requests
 from typing import List
+from dotenv import load_dotenv
 
-# Configure Azure OpenAI credentials and endpoint
-AZURE_OPENAI_KEY = "<YOUR_AZURE_KEY>"
-AZURE_ENDPOINT = "<YOUR_AZURE_ENDPOINT>"  # Ensure it ends with /openai/deployments/<deployment_name>/chat/completions
-DEPLOYMENT_NAME = "<YOUR_DEPLOYMENT_NAME>"  # Replace with your deployment name
+# Load environment variables from .env file
+load_dotenv()
 
+
+AZURE_OPENAI_API_KEY = os.getenv("AZURE_OPENAI_API_KEY")
+AZURE_RESOURCE_NAME = os.getenv("AZURE_RESOURCE_NAME")
+AZURE_DEPLOYMENT_ID = os.getenv("AZURE_DEPLOYMENT_ID")
+AZURE_API_VERSION = os.getenv("AZURE_API_VERSION", "2025-03-01-preview")  # or your default
+
+if not AZURE_RESOURCE_NAME or not AZURE_DEPLOYMENT_ID:
+    logging.error("Azure config not loaded correctly in stock_finder! Check .env and load_dotenv.")
+    raise ValueError("Azure config not loaded correctly!")
+
+AZURE_ENDPOINT = f"https://{AZURE_RESOURCE_NAME}.openai.azure.com"
 
 def validate_ticker(ticker: str) -> bool:
     """Validate ticker format ($SYMBOL with 1-5 alphanumeric chars after $)."""
@@ -32,7 +42,8 @@ def get_relevant_tickers(theme: str, max_tickers: int = 3) -> List[str]:
     """
     try:
         # Construct the URL for the Azure OpenAI REST API endpoint
-        url = f"{AZURE_ENDPOINT}/openai/deployments/{DEPLOYMENT_NAME}/chat/completions"
+        url = f"{AZURE_ENDPOINT}/openai/deployments/{AZURE_DEPLOYMENT_ID}/chat/completions?api-version={AZURE_API_VERSION}"
+
 
         # Define the system prompt and user's theme query
         payload = {
@@ -58,7 +69,7 @@ def get_relevant_tickers(theme: str, max_tickers: int = 3) -> List[str]:
         # Include authorization and required headers
         headers = {
             "Content-Type": "application/json",
-            "Authorization": f"Bearer {AZURE_OPENAI_KEY}"
+            "Authorization": f"Bearer {AZURE_OPENAI_API_KEY}"
         }
 
         # Make the HTTP POST request

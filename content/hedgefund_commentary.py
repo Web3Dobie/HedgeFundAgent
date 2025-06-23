@@ -7,7 +7,14 @@ from utils.config import DATA_DIR
 from utils.headline_pipeline import fetch_and_score_headlines
 from utils.scorer import score_headlines
 from utils.gpt import generate_gpt_tweet
-from utils.text_utils import insert_cashtags, insert_mentions
+from utils.text_utils import (
+    insert_cashtags, 
+    insert_mentions, 
+    extract_cashtags, 
+    enhance_prompt_with_prices
+)
+from utils.fetch_stock_data import intraday_ticker_data_equities, get_last_brent_price
+from utils.config import ALPHA_VANTAGE_API_KEY 
 from utils.x_post import post_tweet
 from utils.hourly_utils import (
     get_unused_headline_today_for_hourly,
@@ -141,6 +148,7 @@ def post_hedgefund_comment():
 
         # Update the GPT prompt with price information
         updated_prompt = enhance_prompt_with_prices(prompt, prices)
+        
         core = generate_gpt_tweet(updated_prompt)  # Regenerate commentary with price integration
 
         # Insert mentions/cashtags into final tweet

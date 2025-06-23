@@ -10,6 +10,7 @@ import json
 from dotenv import load_dotenv
 from openai import OpenAI
 from typing import List
+from utils.text_utils import insert_cashtags, insert_mentions
 
 from .config import LOG_DIR
 from .stock_finder import get_relevant_tickers
@@ -34,7 +35,13 @@ logging.basicConfig(
 )
 # Set up environment variables for OpenAI
 AZURE_RESOURCE_NAME = os.getenv("AZURE_RESOURCE_NAME", AZURE_RESOURCE_NAME)
-model_name="gpt-4o"  # Default model for Azure OpenAI
+AZURE_DEPLOYMENT_ID = os.getenv("AZURE_DEPLOYMENT_ID", AZURE_DEPLOYMENT_ID)
+AZURE_API_VERSION = os.getenv("AZURE_API_VERSION", AZURE_API_VERSION)
+AZURE_OPENAI_API_KEY = os.getenv("AZURE_OPENAI_API_KEY", AZURE_OPENAI_API_KEY)
+
+if not AZURE_RESOURCE_NAME or not AZURE_DEPLOYMENT_ID:
+    logging.error("Azure config not loaded correctly! Check .env and load_dotenv.")
+    raise ValueError("Azure config not loaded correctly!")
 
 def construct_azure_openai_url() -> str:
     """
@@ -50,7 +57,11 @@ def make_gpt_request(payload: dict) -> dict:
     :param payload: Request payload for generating text.
     :return: Response JSON or empty dictionary in case of error.
     """
+    
+
     url = construct_azure_openai_url()
+    logging.info(f"[DEBUG] Final URL for GPT request: {url}")
+    logging.info(f"[DEBUG] Using API version: {AZURE_API_VERSION}")
     headers = {
         "Content-Type": "application/json",
         "Authorization": f"Bearer {AZURE_OPENAI_API_KEY}",
@@ -72,60 +83,6 @@ def make_gpt_request(payload: dict) -> dict:
         logging.error(f"Exception during GPT request: {e}")
         return {}
 
-
-def generate_gpt_tweet(prompt: str, temperature: float = 0.7) -> str:
-    """
-    Generate commentary with room to expand: target ~240 chars, allow up to 280.
-    Automatically adds relevant cashtags.
-    """
-    payload = {
-        "messages": [
-            {
-                "role": "system",
-                "content": (
-                    "You are an expert hedge fund manager. Analyze the topic and return in format:\n"
-                    "THEME|COMMENTARY\n\n"
-                    "Requirements for commentary:\n"
-                    "- Provide sharp, data-driven market analysis\n"
-                    "- Include specific market implications\n"
-                    "- Focus on actionable investment insights\n"
-                    "- Target ~240 chars (max 280)\n"
-                    "- Theme should be 1-3 key words\n"
-                    "\nExample format:\n"
-                    "HOMEBUILDERS|Housing starts plunge 15% to 3-year low as mortgage rates hit 7%. "
-                    "Seeing inventory buildup and margin pressure for builders. "
-                    "Watch for potential consolidation in smaller players."
-                )
-            },
-            {"role": "user", "content": prompt},
-        ],
-        "temperature": temperature,
-        "max_tokens": 160,
-        "top_p": 1.0,
-    }
-
-    try:
-        response = make_gpt_request(payload)
-        result = response.get("choices", [{}])[0].get("message", {}).get("content", "").strip()
-
-        if not result or "|" not in result:
-            logging.warning("Malformed GPT response, no theme separator found")
-            return result[:280]
-
-        theme, commentary = map(str.strip, result.split("|", 1))
-        tickers = get_relevant_tickers(theme)
-
-        #create final tweet
-        final_tweet = commentary[:280].rsplit(" ", 1)[0] if len(commentary) > 280 else commentary
-        if tickers:
-            final_tweet += "\n\n" + " ".join(tickers)
-        final_tweet += "\n\nThis is my opinion. Not financial advice."
-
-        return final_tweet.strip()
-
-    except Exception as e:
-        logging.error(f"Error generating GPT tweet: {e}")
-        return ""
 
 def generate_gpt_thread(prompt: str, max_parts: int = 5, delimiter: str = "---", max_tokens: int = 1800) -> List[str]:
     """
@@ -181,6 +138,66 @@ def generate_gpt_thread(prompt: str, max_parts: int = 5, delimiter: str = "---",
     except Exception as e:
         logging.error(f"Error generating GPT thread: {e}")
         return []
+
+def generate_gpt_tweet(prompt: str, temperature: float = 0.7) -> str:
+    logging.info(f"[DEBUG] AZURE_RESOURCE_NAME: {AZURE_RESOURCE_NAME}")
+    logging.info(f"[DEBUG] AZURE_DEPLOYMENT_ID: {AZURE_DEPLOYMENT_ID}")
+    logging.info(f"[DEBUG] URL: {construct_azure_openai_url()}")
+    logging.info(f"[DEBUG] Called generate_gpt_tweet with prompt: {prompt[:100]}")
+
+    """
+    Generate commentary with room to expand: target ~240 chars, allow up to 280.
+    Automatically adds relevant cashtags.
+    """
+    payload = {
+        "messages": [
+            {
+                "role": "system",
+                "content": (
+                    "You are an expert hedge fund manager. Analyze the topic and return in format:\n"
+                    "THEME|COMMENTARY\n\n"
+                    "Requirements for commentary:\n"
+                    "- Provide sharp, data-driven market analysis\n"
+                    "- Include specific market implications\n"
+                    "- Focus on actionable investment insights\n"
+                    "- Target ~240 chars (max 280)\n"
+                    "- Theme should be 1-3 key words\n"
+                    "\nExample format:\n"
+                    "HOMEBUILDERS|Housing starts plunge 15% to 3-year low as mortgage rates hit 7%. "
+                    "Seeing inventory buildup and margin pressure for builders. "
+                    "Watch for potential consolidation in smaller players."
+                )
+            },
+            {"role": "user", "content": prompt},
+        ],
+        "temperature": temperature,
+        "max_tokens": 160,
+        "top_p": 1.0,
+    }
+
+    try:
+        response = make_gpt_request(payload)
+        result = response.get("choices", [{}])[0].get("message", {}).get("content", "").strip()
+
+        if not result or "|" not in result:
+            logging.warning("Malformed GPT response, no theme separator found")
+            return result[:280]
+
+        theme, commentary = map(str.strip, result.split("|", 1))
+        tickers = get_relevant_tickers(theme)
+
+        # create final tweet
+        final_tweet = commentary[:280].rsplit(" ", 1)[0] if len(commentary) > 280 else commentary
+        if tickers:
+            final_tweet += "\n\n" + " ".join(tickers)
+        final_tweet += "\n\nThis is my opinion. Not financial advice."
+
+        return final_tweet.strip()
+
+    except Exception as e:
+        logging.error(f"Error generating GPT tweet: {e}")
+        return ""
+
 
 
 def analyze_market_moves(news_data: dict,) -> dict:

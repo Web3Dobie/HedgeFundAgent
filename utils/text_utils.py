@@ -195,3 +195,31 @@ def extract_cashtags(commentary: str) -> list[str]:
     except Exception as e:
         logger.error(f"Error in extract_cashtags: {e}")
         return []
+
+### --- 5. Enhance Prompt with Prices --- ###
+
+def enhance_prompt_with_prices(prompt: str, prices: dict) -> str:
+    """
+    Enhances the prompt by appending price data for referenced tickers.
+
+    Args:
+        prompt (str): The original GPT prompt.
+        prices (dict): Dictionary like {"$AAPL": 189.24, "$BTC": 67800.12}
+
+    Returns:
+        str: The enhanced prompt including price information.
+    """
+    if not prices:
+        return prompt
+
+    price_lines = []
+    for tag, price in prices.items():
+        if price is not None:
+            price_lines.append(f"{tag}: ${price:.2f}")
+        else:
+            price_lines.append(f"{tag}: price unavailable")
+
+    price_info = "Price data:\n" + "\n".join(price_lines)
+
+    return f"{prompt}\n\n{price_info}"
+
