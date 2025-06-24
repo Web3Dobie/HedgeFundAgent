@@ -35,7 +35,6 @@ def score_headlines(items: list[dict], min_score: int = 8) -> list[dict]:
     failed_count=0
     for item in items:
         item.setdefault("score", 1)  # Default score if not set
-        item.setdefault("ticker", classify_headline_topic(item.get("headline", "")))
         item.setdefault("url", "")
         item.setdefault("timestamp", datetime.utcnow().isoformat())
         
@@ -72,6 +71,7 @@ def score_headlines(items: list[dict], min_score: int = 8) -> list[dict]:
 
         # Append item with updated score to the result list (only if >= min_score)
         if item['score'] >= min_score:
+            item["ticker"] = classify_headline_topic(item.get("headline", ""))
             scored_items.append(item)
 
     logging.info(f"Total headlines processed: {len(items)}")
