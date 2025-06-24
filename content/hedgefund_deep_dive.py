@@ -1,4 +1,5 @@
 import logging
+from datetime import datetime
 from utils.headline_pipeline import get_top_headline_last_7_days
 from utils.gpt import generate_gpt_thread
 from utils.text_utils import insert_mentions, insert_cashtags
