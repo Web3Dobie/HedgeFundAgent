@@ -161,7 +161,7 @@ def fetch_eod_movers(api_key):
 
 def intraday_ticker_data_equities(symbol: str) -> dict:
     """
-    Fetch intraday price data for a global equity symbol using Alpha Vantage API.
+    Fetch intraday price data + daily % change for a global equity symbol using Alpha Vantage API.
     """
     url = f"https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol={symbol}&apikey={ALPHA_VANTAGE_API_KEY}"
 
@@ -173,6 +173,7 @@ def intraday_ticker_data_equities(symbol: str) -> dict:
             return {
                 "symbol": data["Global Quote"]["01. symbol"],
                 "price": float(data["Global Quote"]["05. price"]),
+                "change_pct": float(data["Global Quote"]["10. change percent"].rstrip('%')),
                 "volume": int(data["Global Quote"]["06. volume"]),
                 "latest_trading_day": data["Global Quote"]["07. latest trading day"],
             }

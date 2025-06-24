@@ -200,11 +200,11 @@ def extract_cashtags(commentary: str) -> list[str]:
 
 def enhance_prompt_with_prices(prompt: str, prices: dict) -> str:
     """
-    Enhances the prompt by appending price data for referenced tickers.
+    Enhances the prompt by appending price + change data for referenced tickers.
 
     Args:
         prompt (str): The original GPT prompt.
-        prices (dict): Dictionary like {"$AAPL": 189.24, "$BTC": 67800.12}
+        prices (dict): Dictionary like {"$AAPL": {"price": 189.24, "change_pct": -2.5}}
 
     Returns:
         str: The enhanced prompt including price information.
@@ -213,13 +213,15 @@ def enhance_prompt_with_prices(prompt: str, prices: dict) -> str:
         return prompt
 
     price_lines = []
-    for tag, price in prices.items():
-        if price is not None:
-            price_lines.append(f"{tag}: ${price:.2f}")
+    for tag, data in prices.items():
+        if data:
+            price_str = f"{tag}: ${data['price']:.2f}"
+            if "change_pct" in data and data["change_pct"] is not None:
+                price_str += f" ({data['change_pct']:+.2f}%)"
+            price_lines.append(price_str)
         else:
             price_lines.append(f"{tag}: price unavailable")
 
     price_info = "Price data:\n" + "\n".join(price_lines)
-
     return f"{prompt}\n\n{price_info}"
 

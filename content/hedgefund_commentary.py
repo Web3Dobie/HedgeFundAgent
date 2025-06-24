@@ -71,34 +71,25 @@ def get_next_category():
     last_used_category = next_category
     return next_category
 
-def fetch_market_price(ticker: str) -> float:
-    """
-    Fetch market price for a given ticker. Determines whether the asset is an equity or Brent crude oil
-    and calls the appropriate API.
-
-    Args:
-        ticker (str): Ticker symbol (e.g., "AAPL" for stocks or "BRENT" for Brent crude oil).
-        
-    Returns:
-        float: Last available price of the asset, or None if unavailable.
-    """
-    # Check if the ticker corresponds to Brent crude oil
+def fetch_market_price(ticker: str) -> dict:
     if ticker.upper() == "BRENT":
-        return get_last_brent_price(api_key=ALPHA_VANTAGE_API_KEY)
-    
-    # Otherwise, assume it's an equity symbol and fetch intraday data
-    intraday_data = intraday_ticker_data_equities(symbol=ticker)
-    if intraday_data and "price" in intraday_data:
-        return intraday_data["price"]
-    
+        brent_price = get_last_brent_price(api_key=ALPHA_VANTAGE_API_KEY)
+        return {"price": brent_price, "change_pct": None} if brent_price else None
+
+    data = intraday_ticker_data_equities(symbol=ticker)
+    if data and "price" in data:
+        return {
+            "price": data["price"],
+            "change_pct": data.get("change_pct")
+        }
+
     logging.warning(f"Price not found for ticker {ticker}")
     return None
+
 
 def post_hedgefund_comment():
     logger.info("🧠 Generating hedge fund investor comment")
 
-    # Step 1: Load today's headlines that haven't been used for hourly commentary
-    
     scored_path = os.path.join(DATA_DIR, "scored_headlines.csv")
     if not os.path.exists(scored_path):
         logger.warning("No scored headlines found.")
@@ -108,7 +99,6 @@ def post_hedgefund_comment():
     with open(scored_path, newline="", encoding="utf-8") as f:
         rows = list(csv.DictReader(f))
 
-    # Filter: today only, and not yet used in hourly commentary
     recent = [
         r for r in rows
         if r.get("timestamp", "").startswith(today) and
@@ -119,13 +109,9 @@ def post_hedgefund_comment():
         logger.warning("No unused headlines available for hourly commentary.")
         return
 
-    # Step 2: Get the next category in rotation
     target_category = get_next_category()
-
-    # Step 3: Filter headlines based on the desired category
     categorized = [r for r in recent if classify_headline(r["headline"]) == target_category]
 
-    # Step 4: Use highest scoring headline from selected category or fallback to random
     if categorized:
         headline = max(categorized, key=lambda r: int(r["score"]))
     else:
@@ -135,29 +121,29 @@ def post_hedgefund_comment():
     category = classify_headline(headline["headline"])
     prompt = build_prompt(headline["headline"], category)
 
-    # Step 5: Generate tweet
     core = generate_gpt_tweet(prompt)
-
-    if core:
-        # Extract base cashtags from the commentary
-        cashtags = extract_cashtags(core)
-        logger.info(f"Identified cashtags: {cashtags}")
-
-        # Fetch real-time market price data for cashtags
-        prices = {tag: fetch_market_price(tag.strip("$")) for tag in cashtags}
-
-        # Update the GPT prompt with price information
-        updated_prompt = enhance_prompt_with_prices(prompt, prices)
-        
-        core = generate_gpt_tweet(updated_prompt)  # Regenerate commentary with price integration
-
-        # Insert mentions/cashtags into final tweet
-        tagged = insert_mentions(core)
-        tagged = insert_cashtags(tagged)
-        tweet = f"{core} {tagged[len(core):].strip()}"
-        post_tweet(tweet, category=category)
-        mark_headline_used_in_hourly_commentary(headline["headline"])
-    else:
+    if not core:
         logger.error("GPT did not return a tweet.")
+        return
 
+    cashtags = extract_cashtags(core)
+    logger.info(f"Identified cashtags: {cashtags}")
 
+    prices = {}
+    for tag in cashtags:
+        ticker = tag.strip("$")
+        price_data = fetch_market_price(ticker)
+        if price_data:
+            prices[tag] = price_data
+
+    # Enhance prompt + regenerate tweet with price info
+    enhanced_prompt = enhance_prompt_with_prices(prompt, prices)
+    final_core = generate_gpt_tweet(enhanced_prompt) or core
+
+    tagged = insert_mentions(final_core)
+    tagged = insert_cashtags(tagged)
+    tweet = f"{final_core} {tagged[len(final_core):].strip()}"
+
+    post_tweet(tweet, category=category)
+    mark_headline_used_in_hourly_commentary(headline["headline"])
+    logger.info(f"Posted hedge fund commentary tweet: {tweet}")
