@@ -97,3 +97,30 @@ def get_top_headline_last_7_days():
     # Choose the row with max float(score)
     top = max(recent, key=lambda r: float(r["score"]))
     return {"headline": top["headline"], "url": top["url"]}
+
+def get_top_headline_today():
+    """
+    Returns the highest-scoring headline from today.
+    """
+    try:
+        with open(SCORED_FILE, newline="", encoding="utf-8") as f:
+            rows = list(csv.DictReader(f))
+    except FileNotFoundError:
+        logging.warning("[ALERT] No scored headlines file found.")
+        return None
+
+    today = datetime.utcnow().date().isoformat()
+    today_rows = [r for r in rows if r.get("timestamp", "").startswith(today)]
+
+    if not today_rows:
+        logging.info("[INFO] No scored headlines for today.")
+        return None
+
+    top = max(today_rows, key=lambda r: float(r["score"]))
+    return {
+        "headline": top["headline"],
+        "url": top["url"],
+        "score": top["score"]
+    }
+
+    

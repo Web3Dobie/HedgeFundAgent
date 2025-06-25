@@ -1,6 +1,6 @@
 import logging
 from datetime import datetime
-from utils.headline_pipeline import get_top_headline_last_7_days
+from utils.headline_pipeline import get_top_headline_today
 from utils.gpt import generate_gpt_thread
 from utils.text_utils import insert_mentions, insert_cashtags
 from utils.x_post import post_thread
@@ -17,47 +17,43 @@ def build_deep_dive_prompt(headline: str) -> str:
 def post_hedgefund_deep_dive():
     logger.info("📊 Generating hedge fund deep-dive thread")
 
-    # Step 1: Fetch today's top headline
-    today = datetime.utcnow().date().isoformat()
-    headline = fetch_and_score_headlines(date=today)
-
-    if not headline or len(headline) == 0:
-        logger.warning("No top headline available for today's deep-dive.")
+    top_headline = get_top_headline_today()
+    if not top_headline:
+        logger.warning("No top headline available for today's deep dive.")
         return
 
-    # Select the highest scoring headline for today
-    top_headline = max(headline, key=lambda h: h.get("score", 0))
-    logger.info(f"Today's top headline selected: {top_headline['headline']}")
+    logger.info(f"Selected deep dive headline: {top_headline['headline']}")
 
-    # Step 2: Build initial prompt
     prompt = build_deep_dive_prompt(top_headline["headline"])
-
-    # Step 3: Generate initial thread
     thread = generate_gpt_thread(prompt, max_parts=5)
-
+    
     if thread and len(thread) >= 3:
-        # Step 4: Extract all cashtags across all parts of the thread
         cashtags = set()
         for part in thread:
-            cashtags.update(insert_cashtags(part))  # `insert_cashtags` extracts and adds cashtags
+            cashtags.update(insert_cashtags(part))  # Assuming this extracts cashtags
 
         logger.info(f"Identified cashtags for thread enrichment: {cashtags}")
 
-        # Step 5: Fetch real-time market prices for identified tickers
         prices = {tag: fetch_market_price(tag.strip("$")) for tag in cashtags}
+        logger.info(f"Fetched price data: {prices}")
 
-        # Step 6: Enhance each part with price data and enrich content
         enriched = []
-        for i, part in enumerate(thread):
+        for part in thread:
             enriched_part = part
             for tag, price in prices.items():
-                if f"${tag}" in part and price:
-                    enriched_part += f" (Latest price: ${price:.2f})"
+                if price and "price" in price and f"${tag}" in part:
+
+                    price_str = f"(Latest price: ${price['price']:.2f}"
+                    if price.get("change_pct") is not None:
+                        price_str += f", change: {price['change_pct']:+.2f}%)"
+                    else:
+                        price_str += ")"
+
+                    enriched_part += f" {price_str}"
             enriched_part = insert_mentions(insert_cashtags(enriched_part))
             enriched.append(enriched_part)
 
-        # Step 7: Post the enriched deep-dive thread
         post_thread(enriched, category="deep_dive")
+        logger.info("✅ Deep-dive thread posted successfully.")
     else:
         logger.error("GPT did not return a valid deep-dive thread.")
-
