@@ -13,6 +13,8 @@ from utils.text_utils import (
     extract_cashtags, 
     enhance_prompt_with_prices
 )
+from utils.theme_tracker import load_recent_themes, extract_theme, is_duplicate_theme, track_theme
+
 from utils.fetch_stock_data import intraday_ticker_data_equities, get_last_brent_price
 from utils.config import ALPHA_VANTAGE_API_KEY 
 from utils.x_post import post_tweet
@@ -110,13 +112,21 @@ def post_hedgefund_comment():
         return
 
     target_category = get_next_category()
-    categorized = [r for r in recent if classify_headline(r["headline"]) == target_category]
+    candidates = [r for r in recent if classify_headline(r["headline"]) == target_category]
 
-    if categorized:
-        headline = max(categorized, key=lambda r: int(r["score"]))
+    if not candidates:
+        logger.warning(f"No headlines available for category '{target_category}', falling back to all recent.")
+        candidates = recent
+
+    # Try to find a headline with unused theme
+    for headline in sorted(candidates, key=lambda r: int(r["score"]), reverse=True):
+        theme = extract_theme(headline["headline"])
+        if not is_duplicate_theme(theme):
+            break
     else:
-        logger.warning(f"No headlines available for category '{target_category}', falling back to random.")
-        headline = random.choice(recent)
+        logger.warning("All headlines have duplicate themes. Using highest scoring anyway.")
+        headline = candidates[0]
+        theme = extract_theme(headline["headline"])
 
     category = classify_headline(headline["headline"])
     prompt = build_prompt(headline["headline"], category)
@@ -136,14 +146,23 @@ def post_hedgefund_comment():
         if price_data:
             prices[tag] = price_data
 
-    # Enhance prompt + regenerate tweet with price info
-    enhanced_prompt = enhance_prompt_with_prices(prompt, prices)
-    final_core = generate_gpt_tweet(enhanced_prompt) or core
+    if prices:
+        enhanced_prompt = enhance_prompt_with_prices(prompt, prices)
+        final_core = generate_gpt_tweet(enhanced_prompt) or core
+    else:
+        final_core = core
 
     tagged = insert_mentions(final_core)
     tagged = insert_cashtags(tagged)
     tweet = f"{final_core} {tagged[len(final_core):].strip()}"
 
+    logger.info(f"Using theme: {theme}")
+    logger.info(f"Using category: {category}")
     post_tweet(tweet, category=category)
     mark_headline_used_in_hourly_commentary(headline["headline"])
+    track_theme(theme)
     logger.info(f"Posted hedge fund commentary tweet: {tweet}")
+
+if __name__ == "__main__":
+    load_recent_themes()
+    post_hedgefund_comment()
