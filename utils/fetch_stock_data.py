@@ -184,41 +184,25 @@ def intraday_ticker_data_equities(symbol: str) -> dict:
         logging.error(f"Error fetching intraday data for {symbol}: {e}")
         return {}
 
-def get_last_brent_price(api_key: str, interval: str = "daily") -> float:
-    """
-    Fetch the last available price for Brent Crude Oil using Alpha Vantage's BRENT API.
-    
-    :param api_key: Your Alpha Vantage API key
-    :param interval: The data interval ('daily', 'weekly', or 'monthly'). Default is 'daily'
-    :return: Last available price as a float, or None if unavailable
-    """
-    url = f"https://www.alphavantage.co/query?function=BRENT&interval={interval}&apikey={api_key}"
-    
+def get_last_brent_price():
     try:
-        response = requests.get(url)
-        response.raise_for_status()
-        data = response.json()
-
-        # Extract the time series based on the interval provided
-        time_series_key = f"Time Series ({interval.capitalize()})"
-        
-        if time_series_key in data:
-            # Get the most recent timestamp in the time series
-            latest_date = next(iter(data[time_series_key]))
-            last_price = float(data[time_series_key][latest_date]["1. open"])
-            return last_price
-        else:
-            logging.warning(f"No data found for Brent Crude Oil with interval '{interval}'. Response: {data}")
-            return None
+        brent = yf.Ticker("BZ=F")  # Brent Crude futures
+        data = brent.history(period="1d", interval="1m")
+        if not data.empty:
+            latest = data.iloc[-1]
+            return {
+                "price": float(latest["Close"]),
+                "change_pct": float((latest["Close"] - latest["Open"]) / latest["Open"]) * 100
+            }
     except Exception as e:
-        logging.error(f"Error fetching Brent price data: {e}")
-        return None
+        logging.error(f"Error fetching Brent price from yfinance: {e}")
+    return None
 
 # Fetch market prices and %change for enrichment of commentary  
 def fetch_market_price(ticker: str) -> dict:
     if ticker.upper() == "BRENT":
-        brent_price = get_last_brent_price(api_key=ALPHA_VANTAGE_API_KEY)
-        return {"price": brent_price, "change_pct": None} if brent_price else None
+        brent_price = get_last_brent_price()
+        return brent_price if brent_price else None
 
     data = intraday_ticker_data_equities(symbol=ticker)
     if data and "price" in data:
