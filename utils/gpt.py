@@ -190,8 +190,7 @@ def generate_gpt_tweet(prompt: str, temperature: float = 0.7) -> str:
         final_tweet = commentary[:280].rsplit(" ", 1)[0] if len(commentary) > 280 else commentary
         if tickers:
             final_tweet += "\n\n" + " ".join(tickers)
-        final_tweet += "\n\nThis is my opinion. Not financial advice."
-
+        
         return final_tweet.strip()
 
     except Exception as e:

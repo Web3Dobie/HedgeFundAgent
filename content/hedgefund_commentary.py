@@ -2,6 +2,7 @@ import logging
 from datetime import datetime
 import random
 import csv, os
+import re
 
 from utils.config import DATA_DIR
 from utils.headline_pipeline import fetch_and_score_headlines
@@ -11,7 +12,8 @@ from utils.text_utils import (
     insert_cashtags, 
     insert_mentions, 
     extract_cashtags, 
-    enhance_prompt_with_prices
+    enhance_prompt_with_prices,
+    enrich_cashtags_with_price
 )
 from utils.theme_tracker import load_recent_themes, extract_theme, is_duplicate_theme, track_theme
 
@@ -51,11 +53,23 @@ def classify_headline(headline: str) -> str:
 
 def build_prompt(headline: str, category: str) -> str:
     if category == CATEGORY_MACRO:
-        return f"Comment on this political/macro headline like a global macro hedge fund PM: '{headline}'"
+        return (
+            f"Comment on this political/macro headline like a global macro hedge fund PM: '{headline}'. "
+            f"Whenever you mention a stock ticker (cashtag like $XYZ), always include latest price and percent change in this format: "
+            f"$XYZ ($123.45, +1.23%)."
+        )
     elif category == CATEGORY_POLITICAL:
-        return f"Comment on this political headline like a hedge fund strategist: '{headline}'"
+        return (
+            f"Comment on this political/macro headline like a global macro hedge fund PM: '{headline}'. "
+            f"Whenever you mention a stock ticker (cashtag like $XYZ), always include latest price and percent change in this format: "
+            f"$XYZ ($123.45, +1.23%)."
+        )
     else:
-        return f"Comment on this financial/corporate headline like an equity hedge fund PM: '{headline}'"
+        return (
+            f"Comment on this political/macro headline like a global macro hedge fund PM: '{headline}'. "
+            f"Whenever you mention a stock ticker (cashtag like $XYZ), always include latest price and percent change in this format: "
+            f"$XYZ ($123.45, +1.23%)."
+        )  
 
 def get_next_category():
     global last_used_category
@@ -140,8 +154,23 @@ def post_hedgefund_comment():
     if prices:
         enhanced_prompt = enhance_prompt_with_prices(prompt, prices)
         final_core = generate_gpt_tweet(enhanced_prompt) or core
+        final_core = enrich_cashtags_with_price(final_core, prices)
+        
     else:
         final_core = core
+
+    DISCLAIMER = "This is my opinion. Not financial advice."
+
+    # Remove any existing disclaimer-like text (if GPT added one)
+    final_core = re.sub(
+        r"This is my opinion\. Not financial advice\.*",
+        "",
+        final_core,
+        flags=re.IGNORECASE
+    ).strip()
+
+    # Append clean disclaimer
+    final_core = f"{final_core}\n\n{DISCLAIMER}"
 
     tagged = insert_mentions(final_core)
     tagged = insert_cashtags(tagged)

@@ -153,12 +153,12 @@ def insert_mentions(text: str) -> str:
 
             # Macro tags
             "trade agreement": "@SecScottBessent @realDonaldTrump",
-            "gdp": "@JeromePowell @SecScottBessent",
-            "unemployment": "@JeromePowell @SecScottBessent",
-            "inflation": "@federalreserve @JeromePowell",
-            "rate hike": "@federalreserve @JeromePowell",
-            "interest rate": "@federalreserve @JeromePowell",
-            "fed": "@federalreserve @JeromePowell",
+            "gdp": "@realDonaldTrump @SecScottBessent",
+            "unemployment": "@realDonaldTrump @SecScottBessent",
+            "inflation": "@federalreserve @realDonaldTrump",
+            "rate hike": "@federalreserve @realDonaldTrump",
+            "interest rate": "@federalreserve @realDonaldTrump",
+            "fed": "@federalreserve @realDonaldTrump",
             "bonds": "@USTreasury @SecScottBessent",
             "treasury": "@USTreasury @SecScottBessent"
         }
@@ -225,3 +225,12 @@ def enhance_prompt_with_prices(prompt: str, prices: dict) -> str:
     price_info = "Price data:\n" + "\n".join(price_lines)
     return f"{prompt}\n\n{price_info}"
 
+### --- 6. Enrich Cashtags with Price Data --- ###
+def enrich_cashtags_with_price(text: str, prices: dict) -> str:
+    def replacer(match):
+        tag = match.group(0)
+        data = prices.get(tag)
+        if data and "price" in data:
+            return f"{tag} (${data['price']:.2f}, {data.get('change_pct', 0):+0.2f}%)"
+        return tag
+    return re.sub(r"\$[A-Z]{1,5}", replacer, text)
