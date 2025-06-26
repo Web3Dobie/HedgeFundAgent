@@ -31,35 +31,47 @@ def post_hedgefund_deep_dive():
 
     prompt = build_deep_dive_prompt(top_headline["headline"])
     thread = generate_gpt_thread(prompt, max_parts=5)
-    
-    if thread and len(thread) >= 3:
-        cashtags = set()
-        for part in thread:
-            cashtags.update(insert_cashtags(part))  # Assuming this extracts cashtags
 
-        logger.info(f"Identified cashtags for thread enrichment: {cashtags}")
-
-        prices = {tag: fetch_market_price(tag.strip("$")) for tag in cashtags}
-        logger.info(f"Fetched price data: {prices}")
-
-        enriched = []
-        for part in thread:
-            enriched_part = enrich_cashtags_with_price(part, prices)
-            enriched_part = insert_mentions(insert_cashtags(enriched_part))
-            enriched.append(enriched_part)
-
-        if enriched:
-            enriched[-1] = re.sub(
-            r"This is my opinion\. Not financial advice\.*\s*",
-            "",
-            enriched[-1],
-            flags=re.IGNORECASE
-        ).strip()
-        enriched[-1] = f"{enriched[-1]}\n\nThis is my opinion. Not financial advice."
-
-        post_thread(enriched, category="deep_dive")
-        logger.info("✅ Deep-dive thread posted successfully.")
-    else:
+    if not thread or len(thread) < 3:
         logger.error("GPT did not return a valid deep-dive thread.")
+        return
 
+    # Collect cashtags from all parts
+    all_cashtags = set()
+    for part in thread:
+        all_cashtags.update(extract_cashtags(part))
+        all_cashtags.update(insert_cashtags(part).split())
 
+    logger.info(f"Identified cashtags for thread enrichment: {all_cashtags}")
+
+    # Fetch prices for all identified cashtags
+    prices = {}
+    for tag in all_cashtags:
+        ticker = tag.strip("$")
+        price_data = fetch_market_price(ticker)
+        if price_data:
+            prices[tag] = price_data
+
+    logger.info(f"Fetched price data: {prices}")
+
+   # Enrich each thread part
+    enriched = []
+    for i, part in enumerate(thread):
+        enriched_part = enrich_cashtags_with_price(part, prices)
+        enriched_part = insert_mentions(enriched_part)
+        enriched_part = insert_cashtags(enriched_part)
+        enriched.append(enriched_part)
+
+    # Clean and append disclaimer to final part
+    enriched[-1] = re.sub(
+        r"This is my opinion\. Not financial advice\.*",
+        "",
+        enriched[-1],
+        flags=re.IGNORECASE
+    ).strip()
+    enriched[-1] += "\n\nThis is my opinion. Not financial advice."
+
+    # Post the full thread
+    post_thread(enriched, category="deep_dive", theme=extract_theme(top_headline["headline"]))
+
+    logger.info("✅ Deep-dive thread posted successfully.")

@@ -31,6 +31,7 @@ logger = logging.getLogger("hedgefund_commentary")
 CATEGORY_MACRO = "macro"
 CATEGORY_EQUITY = "equity"
 CATEGORY_POLITICAL = "political"
+DISCLAIMER = "This is my opinion. Not financial advice."
 
 # Keep a global variable or store this persistently (e.g., file/db) if needed
 last_used_category = None
@@ -55,21 +56,18 @@ def build_prompt(headline: str, category: str) -> str:
     if category == CATEGORY_MACRO:
         return (
             f"Comment on this political/macro headline like a global macro hedge fund PM: '{headline}'. "
-            f"Whenever you mention a stock ticker (cashtag like $XYZ), always include latest price and percent change in this format: "
-            f"$XYZ ($123.45, +1.23%)."
+            f"Whenever you mention a stock ticker (cashtag like $XYZ), include the cashtag; my system will insert price and percent change."
         )
     elif category == CATEGORY_POLITICAL:
         return (
             f"Comment on this political/macro headline like a global macro hedge fund PM: '{headline}'. "
-            f"Whenever you mention a stock ticker (cashtag like $XYZ), always include latest price and percent change in this format: "
-            f"$XYZ ($123.45, +1.23%)."
+            f"Whenever you mention a stock ticker (cashtag like $XYZ), include the cashtag; my system will insert price and percent change."
         )
     else:
         return (
             f"Comment on this political/macro headline like a global macro hedge fund PM: '{headline}'. "
-            f"Whenever you mention a stock ticker (cashtag like $XYZ), always include latest price and percent change in this format: "
-            f"$XYZ ($123.45, +1.23%)."
-        )  
+            f"Whenever you mention a stock ticker (cashtag like $XYZ), include the cashtag; my system will insert price and percent change."  
+        )
 
 def get_next_category():
     global last_used_category
@@ -132,7 +130,6 @@ def post_hedgefund_comment():
         headline = candidates[0]
         theme = extract_theme(headline["headline"])
 
-
     category = classify_headline(headline["headline"])
     prompt = build_prompt(headline["headline"], category)
 
@@ -141,9 +138,14 @@ def post_hedgefund_comment():
         logger.error("GPT did not return a tweet.")
         return
 
-    cashtags = extract_cashtags(core)
-    logger.info(f"Identified cashtags: {cashtags}")
+    # Extract all potential cashtags (inline and trailing)
+    cashtags = set(extract_cashtags(core))
+    trailing = set(insert_cashtags(core).split())
+    cashtags.update(trailing)
 
+    logger.info(f"Total cashtags to enrich: {cashtags}")
+
+    # Fetch live price data
     prices = {}
     for tag in cashtags:
         ticker = tag.strip("$")
@@ -151,17 +153,22 @@ def post_hedgefund_comment():
         if price_data:
             prices[tag] = price_data
 
+    # Enrich GPT output with price info
     if prices:
         enhanced_prompt = enhance_prompt_with_prices(prompt, prices)
         final_core = generate_gpt_tweet(enhanced_prompt) or core
         final_core = enrich_cashtags_with_price(final_core, prices)
-        
     else:
         final_core = core
 
-    DISCLAIMER = "This is my opinion. Not financial advice."
+    # Ensure price enrichment is applied even if GPT ignored prompt instruction
+    final_core = enrich_cashtags_with_price(final_core, prices)
 
-    # Remove any existing disclaimer-like text (if GPT added one)
+    # Add mentions and cashtags into the tweet body first
+    final_core = insert_mentions(final_core)
+    final_core = insert_cashtags(final_core)
+
+    # Clean any pre-existing disclaimer
     final_core = re.sub(
         r"This is my opinion\. Not financial advice\.*",
         "",
@@ -169,19 +176,16 @@ def post_hedgefund_comment():
         flags=re.IGNORECASE
     ).strip()
 
-    # Append clean disclaimer
-    final_core = f"{final_core}\n\n{DISCLAIMER}"
-
-    tagged = insert_mentions(final_core)
-    tagged = insert_cashtags(tagged)
-    tweet = f"{final_core} {tagged[len(final_core):].strip()}"
+    # Append clean disclaimer LAST
+    DISCLAIMER = "This is my opinion. Not financial advice."
+    tweet = f"{final_core}\n\n{DISCLAIMER}"
 
     logger.info(f"Using theme: {theme}")
     logger.info(f"Using category: {category}")
     post_tweet(tweet, category=category, theme=theme)
     mark_headline_used_in_hourly_commentary(headline["headline"])
     track_theme(theme)
-    logger.info(f"Posted hedge fund commentary tweet: {tweet}")
+    logger.info(f"✅ Posted hedge fund commentary tweet: {tweet}")
 
 if __name__ == "__main__":
     load_recent_themes()
