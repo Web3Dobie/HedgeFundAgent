@@ -17,8 +17,7 @@ from utils.text_utils import (
 )
 from utils.theme_tracker import load_recent_themes, extract_theme, is_duplicate_theme, track_theme
 
-from utils.fetch_stock_data import intraday_ticker_data_equities, get_last_brent_price, fetch_market_price
-from utils.config import ALPHA_VANTAGE_API_KEY 
+from utils.fetch_stock_data import fetch_latest_price_yf
 from utils.x_post import post_tweet
 from utils.hourly_utils import (
     get_unused_headline_today_for_hourly,
@@ -149,7 +148,8 @@ def post_hedgefund_comment():
     prices = {}
     for tag in cashtags:
         ticker = tag.strip("$")
-        price_data = fetch_market_price(ticker)
+        price_data = fetch_latest_price_yf(ticker)
+
         if price_data:
             prices[tag] = price_data
 

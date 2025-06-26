@@ -3,9 +3,14 @@ import re
 from datetime import datetime
 from utils.headline_pipeline import get_top_headline_today
 from utils.gpt import generate_gpt_thread
-from utils.text_utils import insert_mentions, insert_cashtags, enrich_cashtags_with_price
+from utils.text_utils import (
+    insert_mentions, 
+    insert_cashtags, 
+    extract_cashtags,
+    enrich_cashtags_with_price
+)
 from utils.x_post import post_thread
-from utils.fetch_stock_data import fetch_market_price
+from utils.fetch_stock_data import fetch_latest_price_yf
 
 logger = logging.getLogger("hedgefund_deep_dive")
 
@@ -40,15 +45,20 @@ def post_hedgefund_deep_dive():
     all_cashtags = set()
     for part in thread:
         all_cashtags.update(extract_cashtags(part))
-        all_cashtags.update(insert_cashtags(part).split())
+
+    if not all_cashtags:
+        logger.info("No cashtags found — skipping price enrichment.")
+
+    # Optionally cap to avoid excessive lookups
+    all_cashtags = set(list(all_cashtags)[:5])
 
     logger.info(f"Identified cashtags for thread enrichment: {all_cashtags}")
 
-    # Fetch prices for all identified cashtags
+    # Fetch prices using yfinance
     prices = {}
     for tag in all_cashtags:
         ticker = tag.strip("$")
-        price_data = fetch_market_price(ticker)
+        price_data = fetch_latest_price_yf(ticker)
         if price_data:
             prices[tag] = price_data
 

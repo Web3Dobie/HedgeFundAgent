@@ -2,6 +2,8 @@ import yfinance as yf   # Used for fetching historial stock data
 import pandas as pd     # Used for data manipulation and analysis
 import requests         # Used for making HTTP requests to external APIs
 import os               # Used for environment variable management
+import logging          # Used for logging errors and information
+import json             # Used for handling JSON data
 
 from dotenv import load_dotenv
 from utils.config import (FINNHUB_API_KEY, ALPHA_VANTAGE_API_KEY)
@@ -159,57 +161,80 @@ def fetch_eod_movers(api_key):
         print(f"Unexpected response structure: {ke} | Response: {response.text}")
         return {}
 
-def intraday_ticker_data_equities(symbol: str) -> dict:
-    """
-    Fetch intraday price data + daily % change for a global equity symbol using Alpha Vantage API.
-    """
-    url = f"https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol={symbol}&apikey={ALPHA_VANTAGE_API_KEY}"
+# def intraday_ticker_data_equities(symbol: str) -> dict:
+#    """
+#    Fetch intraday price data + daily % change for a global equity symbol using Alpha Vantage API.
+#    """
+#    url = f"https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol={symbol}&apikey={ALPHA_VANTAGE_API_KEY}"
 
-    try:
-        response = requests.get(url)
-        response.raise_for_status()
-        data = response.json()
-        if "Global Quote" in data:
-            return {
-                "symbol": data["Global Quote"]["01. symbol"],
-                "price": float(data["Global Quote"]["05. price"]),
-                "change_pct": float(data["Global Quote"]["10. change percent"].rstrip('%')),
-                "volume": int(data["Global Quote"]["06. volume"]),
-                "latest_trading_day": data["Global Quote"]["07. latest trading day"],
-            }
-        else:
-            logging.warning(f"No intraday data found for {symbol}. Response: {data}")
-            return {}
-    except Exception as e:
-        logging.error(f"Error fetching intraday data for {symbol}: {e}")
-        return {}
+#    try:
+#        response = requests.get(url)
+#        response.raise_for_status()
+#        data = response.json()
+#        if "Global Quote" in data:
+#            return {
+#                "symbol": data["Global Quote"]["01. symbol"],
+#                "price": float(data["Global Quote"]["05. price"]),
+#                "change_pct": float(data["Global Quote"]["10. change percent"].rstrip('%')),
+#                "volume": int(data["Global Quote"]["06. volume"]),
+#                "latest_trading_day": data["Global Quote"]["07. latest trading day"],
+#            }
+#        else:
+#            logging.warning(f"No intraday data found for {symbol}. Response: {data}")
+#            return {}
+#    except Exception as e:
+#        logging.error(f"Error fetching intraday data for {symbol}: {e}")
+#        return {}
 
-def get_last_brent_price():
-    try:
-        brent = yf.Ticker("BZ=F")  # Brent Crude futures
-        data = brent.history(period="1d", interval="1m")
-        if not data.empty:
-            latest = data.iloc[-1]
-            return {
-                "price": float(latest["Close"]),
-                "change_pct": float((latest["Close"] - latest["Open"]) / latest["Open"]) * 100
-            }
-    except Exception as e:
-        logging.error(f"Error fetching Brent price from yfinance: {e}")
-    return None
+# def get_last_brent_price():
+#    try:
+#        brent = yf.Ticker("BZ=F")  # Brent Crude futures
+#        data = brent.history(period="1d", interval="1m")
+#        if not data.empty:
+#            latest = data.iloc[-1]
+#            return {
+#                "price": float(latest["Close"]),
+#                "change_pct": float((latest["Close"] - latest["Open"]) / latest["Open"]) * 100
+#            }
+#    except Exception as e:
+#        logging.error(f"Error fetching Brent price from yfinance: {e}")
+#    return None
 
 # Fetch market prices and %change for enrichment of commentary  
-def fetch_market_price(ticker: str) -> dict:
-    if ticker.upper() == "BRENT":
-        brent_price = get_last_brent_price()
-        return brent_price if brent_price else None
+# def fetch_market_price(ticker: str) -> dict:
+#    if ticker.upper() == "BRENT":
+#        brent_price = get_last_brent_price()
+#        return brent_price if brent_price else None
 
-    data = intraday_ticker_data_equities(symbol=ticker)
-    if data and "price" in data:
+#    data = intraday_ticker_data_equities(symbol=ticker)
+#    if data and "price" in data:
+#        return {
+#            "price": data["price"],
+#            "change_pct": data.get("change_pct")
+#       }
+
+#    logging.warning(f"Price not found for ticker {ticker}")
+#    return None
+
+def fetch_latest_price_yf(ticker: str) -> dict:
+    """
+    Fetch latest price and percent change using yfinance.
+    Returns None if unavailable.
+    """
+    try:
+        t = yf.Ticker(ticker)
+        info = t.info
+        price = info.get("regularMarketPrice") or info.get("previousClose")
+
+        if price is None or prev_close is None:
+            logging.warning(f"Missing price data for {ticker}")
+            return None
+
+        change_pct = (price - prev_close) / prev_close * 100
         return {
-            "price": data["price"],
-            "change_pct": data.get("change_pct")
+            "price": round(price, 2),
+            "change_pct": round(change_pct, 2)
         }
-
-    logging.warning(f"Price not found for ticker {ticker}")
-    return None
+    except Exception as e:
+        logging.error(f"Failed to fetch price for {ticker}: {e}")
+        return None

@@ -181,17 +181,9 @@ def insert_mentions(text: str) -> str:
 ### --- 4. Extract Cashtags --- ###
 
 def extract_cashtags(commentary: str) -> list[str]:
-    """
-    Extract potential cashtags from commentary using regex.
-
-    Args:
-        commentary (str): Input string containing financial commentary.
-    Returns:
-        list[str]: Valid cashtags extracted from the text.
-    """
     try:
-        potential_tickers = re.findall(r"\b[A-Z]{2,5}\b", commentary)
-        return [f"${ticker}" for ticker in potential_tickers if validate_ticker(ticker)]
+        tickers = re.findall(r"\$[A-Za-z0-9\.\-/]+", commentary)
+        return tickers
     except Exception as e:
         logger.error(f"Error in extract_cashtags: {e}")
         return []
