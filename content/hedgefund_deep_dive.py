@@ -4,8 +4,10 @@ from utils.headline_pipeline import get_top_headline_today
 from utils.gpt import generate_gpt_thread
 from utils.text_utils import insert_mentions, insert_cashtags
 from utils.x_post import post_thread
+from utils.fetch_stock_data import fetch_market_price
 
 logger = logging.getLogger("hedgefund_deep_dive")
+
 
 def build_deep_dive_prompt(headline: str) -> str:
     return (

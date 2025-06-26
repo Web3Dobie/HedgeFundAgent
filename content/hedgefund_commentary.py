@@ -15,7 +15,7 @@ from utils.text_utils import (
 )
 from utils.theme_tracker import load_recent_themes, extract_theme, is_duplicate_theme, track_theme
 
-from utils.fetch_stock_data import intraday_ticker_data_equities, get_last_brent_price
+from utils.fetch_stock_data import intraday_ticker_data_equities, get_last_brent_price, fetch_market_price
 from utils.config import ALPHA_VANTAGE_API_KEY 
 from utils.x_post import post_tweet
 from utils.hourly_utils import (
@@ -73,21 +73,6 @@ def get_next_category():
     last_used_category = next_category
     return next_category
 
-def fetch_market_price(ticker: str) -> dict:
-    if ticker.upper() == "BRENT":
-        brent_price = get_last_brent_price(api_key=ALPHA_VANTAGE_API_KEY)
-        return {"price": brent_price, "change_pct": None} if brent_price else None
-
-    data = intraday_ticker_data_equities(symbol=ticker)
-    if data and "price" in data:
-        return {
-            "price": data["price"],
-            "change_pct": data.get("change_pct")
-        }
-
-    logging.warning(f"Price not found for ticker {ticker}")
-    return None
-
 
 def post_hedgefund_comment():
     logger.info("🧠 Generating hedge fund investor comment")
@@ -119,14 +104,20 @@ def post_hedgefund_comment():
         candidates = recent
 
     # Try to find a headline with unused theme
-    for headline in sorted(candidates, key=lambda r: int(r["score"]), reverse=True):
-        theme = extract_theme(headline["headline"])
-        if not is_duplicate_theme(theme):
+    selected = None
+    for r in sorted(candidates, key=lambda r: int(r["score"]), reverse=True):
+        t = extract_theme(r["headline"])
+        if not is_duplicate_theme(t):
+            selected = (r, t)
             break
+
+    if selected:
+        headline, theme = selected
     else:
         logger.warning("All headlines have duplicate themes. Using highest scoring anyway.")
         headline = candidates[0]
         theme = extract_theme(headline["headline"])
+
 
     category = classify_headline(headline["headline"])
     prompt = build_prompt(headline["headline"], category)
@@ -158,7 +149,7 @@ def post_hedgefund_comment():
 
     logger.info(f"Using theme: {theme}")
     logger.info(f"Using category: {category}")
-    post_tweet(tweet, category=category)
+    post_tweet(tweet, category=category, theme=theme)
     mark_headline_used_in_hourly_commentary(headline["headline"])
     track_theme(theme)
     logger.info(f"Posted hedge fund commentary tweet: {tweet}")

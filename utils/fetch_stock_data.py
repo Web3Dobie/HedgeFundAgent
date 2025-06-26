@@ -213,4 +213,19 @@ def get_last_brent_price(api_key: str, interval: str = "daily") -> float:
     except Exception as e:
         logging.error(f"Error fetching Brent price data: {e}")
         return None
-  
+
+# Fetch market prices and %change for enrichment of commentary  
+def fetch_market_price(ticker: str) -> dict:
+    if ticker.upper() == "BRENT":
+        brent_price = get_last_brent_price(api_key=ALPHA_VANTAGE_API_KEY)
+        return {"price": brent_price, "change_pct": None} if brent_price else None
+
+    data = intraday_ticker_data_equities(symbol=ticker)
+    if data and "price" in data:
+        return {
+            "price": data["price"],
+            "change_pct": data.get("change_pct")
+        }
+
+    logging.warning(f"Price not found for ticker {ticker}")
+    return None
