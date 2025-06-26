@@ -3,6 +3,7 @@ import re
 from datetime import datetime
 from utils.headline_pipeline import get_top_headline_today
 from utils.gpt import generate_gpt_thread
+from utils.theme_tracker import extract_theme
 from utils.text_utils import (
     insert_mentions, 
     insert_cashtags, 

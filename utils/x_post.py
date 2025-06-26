@@ -262,7 +262,7 @@ def post_thread(
 
     """Post a thread with enhanced diagnostics and retry handling"""
     # Add detailed diagnostics
-    log_thread_diagnostics(thread_parts, category)
+    log_thread_diagnostics(thread_parts, category, theme)
     
     # Add connection quality check
     start_ping = time.monotonic()

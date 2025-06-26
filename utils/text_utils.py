@@ -181,9 +181,13 @@ def insert_mentions(text: str) -> str:
 ### --- 4. Extract Cashtags --- ###
 
 def extract_cashtags(commentary: str) -> list[str]:
+    """
+    Extracts valid cashtags like $AAPL or $0700.HK, excluding numeric values like $64.20,
+    and removes trailing punctuation from tags like $AAPL, or $TSLA.
+    """
     try:
-        tickers = re.findall(r"\$[A-Za-z0-9\.\-/]+", commentary)
-        return tickers
+        raw_tags = re.findall(r"\$[A-Za-z][A-Za-z0-9\.\-]{0,9}", commentary)
+        return list(set(tag.rstrip('.,;:!?') for tag in raw_tags))
     except Exception as e:
         logger.error(f"Error in extract_cashtags: {e}")
         return []

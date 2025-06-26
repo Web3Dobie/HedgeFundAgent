@@ -217,14 +217,11 @@ def fetch_eod_movers(api_key):
 #    return None
 
 def fetch_latest_price_yf(ticker: str) -> dict:
-    """
-    Fetch latest price and percent change using yfinance.
-    Returns None if unavailable.
-    """
     try:
         t = yf.Ticker(ticker)
         info = t.info
-        price = info.get("regularMarketPrice") or info.get("previousClose")
+        price = info.get("regularMarketPrice")
+        prev_close = info.get("previousClose")  # 👈 You need this line!
 
         if price is None or prev_close is None:
             logging.warning(f"Missing price data for {ticker}")
