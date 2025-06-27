@@ -11,10 +11,9 @@ from utils.text_utils import (
     enrich_cashtags_with_price
 )
 from utils.x_post import post_thread
-from utils.fetch_stock_data import fetch_latest_price_yf
+from utils.fetch_stock_data import fetch_last_price_yf
 
 logger = logging.getLogger("hedgefund_deep_dive")
-
 
 def build_deep_dive_prompt(headline: str) -> str:
     return (
@@ -26,7 +25,7 @@ def build_deep_dive_prompt(headline: str) -> str:
     )
 
 def post_hedgefund_deep_dive():
-    logger.info("📊 Generating hedge fund deep-dive thread")
+    logger.info("\ud83d\udcca Generating hedge fund deep-dive thread")
 
     top_headline = get_top_headline_today()
     if not top_headline:
@@ -59,23 +58,41 @@ def post_hedgefund_deep_dive():
     prices = {}
     for tag in all_cashtags:
         ticker = tag.strip("$")
-        price_data = fetch_latest_price_yf(ticker)
+        price_data = fetch_last_price_yf(ticker)
         if price_data:
             prices[tag] = price_data
 
     logger.info(f"Fetched price data: {prices}")
 
-   # Enrich each thread part
+    # Enrich each thread part
     enriched = []
     for i, part in enumerate(thread):
-        enriched_part = enrich_cashtags_with_price(part, prices)
+        enriched_part = part
+        for tag, data in prices.items():
+            price = data.get("price")
+            change = data.get("change_percent")
+            price_str = f"${price:.2f}" if price is not None else ""
+            change_str = f"{change:+.2f}%" if change is not None else ""
+
+            already_has_price = price_str in enriched_part
+            already_has_change = change_str in enriched_part
+
+            if f"{tag}" in enriched_part and not (already_has_price and already_has_change):
+                addition = []
+                if price_str and not already_has_price:
+                    addition.append(price_str)
+                if change_str and not already_has_change:
+                    addition.append(change_str)
+                if addition:
+                    enriched_part += f" ({', '.join(addition)})"
+
         enriched_part = insert_mentions(enriched_part)
         enriched_part = insert_cashtags(enriched_part)
         enriched.append(enriched_part)
 
     # Clean and append disclaimer to final part
     enriched[-1] = re.sub(
-        r"This is my opinion\. Not financial advice\.*",
+        r"This is my opinion\\. Not financial advice\\.*",
         "",
         enriched[-1],
         flags=re.IGNORECASE
@@ -85,4 +102,4 @@ def post_hedgefund_deep_dive():
     # Post the full thread
     post_thread(enriched, category="deep_dive", theme=extract_theme(top_headline["headline"]))
 
-    logger.info("✅ Deep-dive thread posted successfully.")
+    logger.info("\u2705 Deep-dive thread posted successfully.")
