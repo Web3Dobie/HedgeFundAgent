@@ -222,11 +222,22 @@ def enhance_prompt_with_prices(prompt: str, prices: dict) -> str:
     return f"{prompt}\n\n{price_info}"
 
 ### --- 6. Enrich Cashtags with Price Data --- ###
+import re
+
 def enrich_cashtags_with_price(text: str, prices: dict) -> str:
+    """
+    Replaces $TICKER in the text with $TICKER (price, %change) using provided price data.
+    Strips pre-existing (+X.XX%) patterns to avoid duplication.
+    """
+    # Remove any loose percent-change-only tags that may have been echoed by GPT
+    text = re.sub(r"\(\s*[-+]\d+(\.\d+)?%\)", "", text)
+
     def replacer(match):
         tag = match.group(0)
         data = prices.get(tag)
         if data and "price" in data:
             return f"{tag} (${data['price']:.2f}, {data.get('change_pct', 0):+0.2f}%)"
         return tag
+
     return re.sub(r"\$[A-Z]{1,5}", replacer, text)
+
