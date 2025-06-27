@@ -80,13 +80,14 @@ def score_headlines(items: list[dict], min_score: int = 8) -> list[dict]:
     # Step 2: Enhanced trend detection
     batch = "\n".join(f"- {i['headline']}" for i in scored_items)
     trend_prompt = (
-        "From these headlines, identify the 3 most significant market-moving stories.\n"
-        "Consider combinations of:\n"
-        "- Major policy changes\n"
-        "- Geopolitical tensions\n"
-        "- Significant market shifts\n"
-        "- Economic data surprises\n"
-        "- Cross-asset implications\n\n"
+        "From these headlines, identify the 3 most important *new or still-evolving* market stories.\n"
+        "Avoid stale or already-priced-in themes unless there are major updates.\n"
+        "Look for:\n"
+        "- Policy shifts with fresh implications\n"
+        "- Evolving geopolitical risk (not old flare-ups)\n"
+        "- Surprising economic data\n"
+        "- Major earnings, downgrades, upgrades\n"
+        "- Cross-asset volatility triggers\n\n"
         f"{batch}\n\n"
         "Reply with exact headlines, one per line."
     )
