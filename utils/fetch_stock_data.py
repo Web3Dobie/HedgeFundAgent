@@ -216,22 +216,28 @@ def fetch_eod_movers(api_key):
 #    logging.warning(f"Price not found for ticker {ticker}")
 #    return None
 
-def fetch_latest_price_yf(ticker: str) -> dict:
+def fetch_last_price_yf(symbol: str) -> dict:
     try:
-        t = yf.Ticker(ticker)
-        info = t.info
-        price = info.get("regularMarketPrice")
-        prev_close = info.get("previousClose")  # 👈 You need this line!
+        ticker = yf.Ticker(symbol)
+        hist = ticker.history(period="2d")
 
-        if price is None or prev_close is None:
-            logging.warning(f"Missing price data for {ticker}")
-            return None
+        if hist.empty or len(hist) < 1:
+            return {}
 
+        latest = hist.iloc[-1]
+        prev = hist.iloc[-2] if len(hist) > 1 else latest
+
+        price = latest["Close"]
+        prev_close = prev["Close"]
         change_pct = (price - prev_close) / prev_close * 100
+        timestamp = latest.name.date().isoformat()
+
         return {
-            "price": round(price, 2),
-            "change_pct": round(change_pct, 2)
+            "price": round(price, 4) if symbol.endswith("=X") else round(price, 2),
+            "change_percent": round(change_pct, 2),
+            "timestamp": timestamp
         }
+
     except Exception as e:
-        logging.error(f"Failed to fetch price for {ticker}: {e}")
-        return None
+        print(f"Error fetching data for {symbol}: {e}")
+        return {}
