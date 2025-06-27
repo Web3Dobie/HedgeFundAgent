@@ -162,7 +162,7 @@ def post_hedgefund_comment():
         final_core = core
 
     # Ensure price enrichment is applied even if GPT ignored prompt instruction
-    final_core = enrich_cashtags_with_price(final_core, prices)
+    # = enrich_cashtags_with_price(final_core, prices)
 
     # Add mentions and cashtags into the tweet body first
     final_core = insert_mentions(final_core)
