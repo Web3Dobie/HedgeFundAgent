@@ -241,3 +241,10 @@ def enrich_cashtags_with_price(text: str, prices: dict) -> str:
 
     return re.sub(r"\$[A-Z]{1,5}", replacer, text)
 
+def is_weekend():
+    return datetime.datetime.utcnow().weekday() in [5, 6]
+
+def percent_mentioned(part, value):
+    # Match once, not as trailing duplicate
+    return bool(re.search(rf"{re.escape(value)}(?:%|\\b)", part))
+
