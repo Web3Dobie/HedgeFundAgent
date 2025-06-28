@@ -219,20 +219,45 @@ def render_pdf(headlines: list[tuple], period: str) -> str:
     render_block(morning_eq_data, morning_mc_data, crypto_data, morning_comment, pdf)
 
     # Page 2 - Headlines
-    pdf.set_font("DejaVu", size=11)
     pdf.add_page()
-    pdf.cell(0, 10, "Top Headlines", ln=True)
+    pdf.set_font("DejaVu", "B", 14)
+    pdf.cell(0, 10, f"Top Headlines –  {date_str}", ln=True, align="C")
+    pdf.ln(5)
+
+    # Border around entire content area
+    y_start = pdf.get_y()
+    pdf.set_draw_color(160)
+    pdf.set_line_width(0.4)
+    pdf.rect(15, y_start, 180, 260)
+
+    pdf.set_xy(20, y_start + 5)
+    pdf.set_left_margin(20)
+    pdf.set_right_margin(20)
     pdf.set_font("DejaVu", size=11)
+
     if not headlines:
         pdf.cell(0, 10, "No headlines available.", ln=True)
     else:
-        for i, (score, headline, url) in enumerate(headlines, 1):
-            pdf.ln(5)
-            pdf.multi_cell(0, 10, f"{i}. {headline}\nScore: {score}\n{url}")
+        for score, headline, url in headlines:
+            pdf.set_text_color(0)
+            pdf.set_font("DejaVu", "B", 11)
+            pdf.multi_cell(0, 8, headline)
+
+            pdf.set_text_color(0, 0, 255)
+            pdf.set_font("DejaVu", "", 11)
+            pdf.write(8, url, url)
+            pdf.ln(6)
+
+            prompt = f"As a hedge fund investor, comment on this headline in 2-3 sentences: '{headline}'"
+            comment = generate_gpt_text(prompt, max_tokens=160).strip()
+
+            pdf.set_text_color(0)
+            pdf.set_font("DejaVu", size=11)
+            pdf.multi_cell(0, 8, comment)
+            pdf.ln(8)
 
     pdf.output(filepath)
     return filepath
-
 
 def generate_briefing_pdf(period: str = "morning") -> str:
     headlines = get_top_headlines(period=period)
