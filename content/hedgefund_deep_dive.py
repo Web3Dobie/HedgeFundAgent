@@ -8,7 +8,8 @@ from utils.text_utils import (
     insert_mentions, 
     insert_cashtags, 
     extract_cashtags,
-    enrich_cashtags_with_price
+    enrich_cashtags_with_price,
+    percent_mentioned,
 )
 from utils.x_post import post_thread
 from utils.fetch_stock_data import fetch_last_price_yf
@@ -75,7 +76,7 @@ def post_hedgefund_deep_dive():
             change_str = f"{change:+.2f}%" if change is not None else ""
 
             already_has_price = price_str in enriched_part
-            already_has_change = change_str in enriched_part
+            already_has_change = percent_mentioned(enriched_part, change_str)
 
             if f"{tag}" in enriched_part and not (already_has_price and already_has_change):
                 addition = []
@@ -86,8 +87,11 @@ def post_hedgefund_deep_dive():
                 if addition:
                     enriched_part += f" ({', '.join(addition)})"
 
+        # Avoid duplicate $$ by skipping cashtag insertion if already present
+        if '$' not in enriched_part:
+            enriched_part = insert_cashtags(enriched_part)
+
         enriched_part = insert_mentions(enriched_part)
-        enriched_part = insert_cashtags(enriched_part)
         enriched.append(enriched_part)
 
     # Clean and append disclaimer to final part

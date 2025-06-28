@@ -13,7 +13,8 @@ from utils.text_utils import (
     insert_mentions, 
     extract_cashtags, 
     enhance_prompt_with_prices,
-    enrich_cashtags_with_price
+    enrich_cashtags_with_price,
+    percent_mentioned,
 )
 from utils.theme_tracker import load_recent_themes, extract_theme, is_duplicate_theme, track_theme
 
@@ -137,7 +138,7 @@ def post_hedgefund_comment():
         price_str = f"${price:.2f}" if price is not None else ""
         change_str = f"{change:+.2f}%" if change is not None else ""
         already_has_price = price_str in final_core
-        already_has_change = change_str in final_core
+        already_has_change = percent_mentioned(part, change_str)
         if tag in final_core and not (already_has_price and already_has_change):
             addition = []
             if price_str and not already_has_price:
@@ -148,7 +149,8 @@ def post_hedgefund_comment():
                 final_core += f" ({', '.join(addition)})"
 
     final_core = insert_mentions(final_core)
-    final_core = insert_cashtags(final_core)
+    if "$" not in final_core:
+        final_core = insert_cashtags(final_core)
     final_core = re.sub(
         r"This is my opinion\\. Not financial advice\\.*",
         "",
