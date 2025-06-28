@@ -3,7 +3,7 @@ from datetime import datetime
 from fpdf import FPDF
 
 from utils.headline_pipeline import fetch_and_score_headlines
-from utils.text_utils import classify_headline_topic
+from utils.text_utils import classify_headline_topic, is_weekend
 from utils.config import DATA_DIR
 from utils.fetch_stock_data import fetch_last_price_yf
 from utils.gpt import generate_gpt_text
@@ -90,7 +90,7 @@ def fetch_price_block(tickers: dict) -> dict:
                 if not price or not pct_change:
                     data[label] = "N/A"
                 elif timestamp and timestamp < today:
-                    data[label] = "Public Holiday"
+                    data[label] = "Weekend" if is_weekend() else "Public Holiday"
                 else:
                     # Format FX with 4 decimals, others with 2
                     price_fmt = f"{price:.4f}" if symbol.endswith("=X") else f"{price:.2f}"
@@ -218,19 +218,13 @@ def render_pdf(headlines: list[tuple], period: str) -> str:
     morning_comment = generate_gpt_comment({**morning_eq_data, **morning_mc_data, **crypto_data}, region="Global")
     render_block(morning_eq_data, morning_mc_data, crypto_data, morning_comment, pdf)
 
-    # Page 2 - Headlines
+    # Page 2 - Top Headlines (auto-paginated)
     pdf.add_page()
     pdf.set_font("DejaVu", "B", 14)
     pdf.cell(0, 10, f"Top Headlines –  {date_str}", ln=True, align="C")
     pdf.ln(5)
 
-    # Border around entire content area
-    y_start = pdf.get_y()
-    pdf.set_draw_color(160)
-    pdf.set_line_width(0.4)
-    pdf.rect(15, y_start, 180, 260)
-
-    pdf.set_xy(20, y_start + 5)
+    pdf.set_auto_page_break(auto=True, margin=15)
     pdf.set_left_margin(20)
     pdf.set_right_margin(20)
     pdf.set_font("DejaVu", size=11)
@@ -239,13 +233,43 @@ def render_pdf(headlines: list[tuple], period: str) -> str:
         pdf.cell(0, 10, "No headlines available.", ln=True)
     else:
         for score, headline, url in headlines:
+            # Page space check
+            block_height_estimate = 60  # adjust as needed
+            page_height = 297  # A4 in mm
+            available_space = page_height - pdf.get_y() - 15
+
+            if available_space < block_height_estimate:
+                pdf.add_page()
+                pdf.set_left_margin(20)
+                pdf.set_right_margin(20)
+                pdf.set_font("DejaVu", "B", 14)
+                pdf.cell(0, 10, f"Top Headlines –  {date_str} (cont’d)", ln=True, align="C")
+                pdf.ln(5)
+
+            # Headline (bold)
             pdf.set_text_color(0)
             pdf.set_font("DejaVu", "B", 11)
             pdf.multi_cell(0, 8, headline)
 
+            # Move back up slightly to avoid extra line gap
+            pdf.set_y(pdf.get_y() - 2)
+
+            # URL (blue hyperlink)
             pdf.set_text_color(0, 0, 255)
             pdf.set_font("DejaVu", "", 11)
             pdf.write(8, url, url)
+
+            # Manually move to next line
+            pdf.set_y(pdf.get_y() + 8)
+            
+            # Add horizontal line divider between URL and Comment
+            pdf.set_draw_color(200)  # light gray
+            x_start = pdf.get_x()
+            y_pos = pdf.get_y()
+            page_width = 210  # A4 width
+            right_margin = 20
+            x_end = page_width - right_margin
+            pdf.line(x_start, y_pos, x_end, y_pos)
             pdf.ln(6)
 
             prompt = f"As a hedge fund investor, comment on this headline in 2-3 sentences: '{headline}'"
@@ -254,7 +278,7 @@ def render_pdf(headlines: list[tuple], period: str) -> str:
             pdf.set_text_color(0)
             pdf.set_font("DejaVu", size=11)
             pdf.multi_cell(0, 8, comment)
-            pdf.ln(8)
+            pdf.ln(10)
 
     pdf.output(filepath)
     return filepath
