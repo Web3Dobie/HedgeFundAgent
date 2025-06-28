@@ -69,7 +69,12 @@ def post_hedgefund_deep_dive():
     enriched = []
     for i, part in enumerate(thread):
         enriched_part = part
+        seen_tickers = set()
+
         for tag, data in prices.items():
+            if tag in seen_tickers:
+                continue  # already enriched this tag in this part
+
             price = data.get("price")
             change = data.get("change_percent")
             price_str = f"${price:.2f}" if price is not None else ""
@@ -86,11 +91,10 @@ def post_hedgefund_deep_dive():
                     addition.append(change_str)
                 if addition:
                     enriched_part += f" ({', '.join(addition)})"
+                    seen_tickers.add(tag)  # mark as used
 
-        # Avoid duplicate $$ by skipping cashtag insertion if already present
         if '$' not in enriched_part:
             enriched_part = insert_cashtags(enriched_part)
-
         enriched_part = insert_mentions(enriched_part)
         enriched.append(enriched_part)
 

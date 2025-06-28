@@ -132,13 +132,19 @@ def post_hedgefund_comment():
     else:
         final_core = core
 
+    seen_tickers = set()
     for tag, data in prices.items():
+        if tag in seen_tickers:
+            continue
+
         price = data.get("price")
         change = data.get("change_percent")
         price_str = f"${price:.2f}" if price is not None else ""
         change_str = f"{change:+.2f}%" if change is not None else ""
+
         already_has_price = price_str in final_core
-        already_has_change = percent_mentioned(part, change_str)
+        already_has_change = percent_mentioned(final_core, change_str)
+
         if tag in final_core and not (already_has_price and already_has_change):
             addition = []
             if price_str and not already_has_price:
@@ -147,10 +153,11 @@ def post_hedgefund_comment():
                 addition.append(change_str)
             if addition:
                 final_core += f" ({', '.join(addition)})"
+                seen_tickers.add(tag)
 
-    final_core = insert_mentions(final_core)
     if "$" not in final_core:
         final_core = insert_cashtags(final_core)
+    final_core = insert_mentions(final_core)
     final_core = re.sub(
         r"This is my opinion\\. Not financial advice\\.*",
         "",
