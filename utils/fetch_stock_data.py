@@ -217,6 +217,9 @@ def fetch_eod_movers(api_key):
 #    return None
 
 def fetch_last_price_yf(symbol: str) -> dict:
+    # Suppress noisy yfinance logs
+    logging.getLogger("yfinance").setLevel(logging.WARNING)
+
     try:
         ticker = yf.Ticker(symbol)
         hist = ticker.history(period="2d")
@@ -239,5 +242,5 @@ def fetch_last_price_yf(symbol: str) -> dict:
         }
 
     except Exception as e:
-        print(f"Error fetching data for {symbol}: {e}")
+        logging.error(f"[YF] Error fetching data for {symbol}: {e}")
         return {}
