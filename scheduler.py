@@ -8,6 +8,7 @@ from dotenv import load_dotenv
 
 from content.hedgefund_commentary import post_hedgefund_comment
 from content.hedgefund_deep_dive import post_hedgefund_deep_dive
+from content.briefings import run_morning_briefing
 from utils import fetch_and_score_headlines, rotate_logs
 
 load_dotenv()
@@ -28,8 +29,12 @@ sys.stdout.flush()
 schedule.every().hour.at(":30").do(fetch_and_score_headlines)
 
 # --- Daily Hedge Fund Tweets ---
-for hour in range(9, 20):  # 9am to 7pm inclusive
+for hour in range(9, 21, 2):  # 9am, 11am, 1pm, 3pm, 5pm, 7pm
     schedule.every().day.at(f"{hour:02d}:00").do(post_hedgefund_comment)
+
+# --- Weekday Morning Briefing ---
+for day in ["monday", "tuesday", "wednesday", "thursday", "friday"]:
+    getattr(schedule.every(), day).at("06:00").do(run_morning_briefing)
 
 # --- Daily Deep Dive Thread ---
 schedule.every().day.at("22:00").do(post_hedgefund_deep_dive)
