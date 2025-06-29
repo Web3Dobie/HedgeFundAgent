@@ -1,17 +1,9 @@
 from threading import Lock
 import requests
 import logging
+from data.ticker_blocks import CRYPTO as CRYPTO_TOKENS # Importing CRYPTO tokens from ticker blocks
 
 logger = logging.getLogger(__name__)
-# Define the tokens and their corresponding tickers
-TOKENS = {
-    "bitcoin": "BTC",  # Bitcoin
-    "ethereum": "ETH",  # Ethereum
-    "solana": "SOL",  # Solana
-    "ripple": "XRP",  # Ripple
-    "sui": "SUI",  # Sui
-    "cardano": "ADA",  # Cardano
-}
 
 def get_top_tokens_data():
     """
@@ -19,7 +11,7 @@ def get_top_tokens_data():
     Returns a list of dicts with 'ticker', 'price', and 'change'.
     """
     try:
-        ids = ",".join(TOKENS.keys())
+        ids = ",".join(CRYPTO_TOKENS.keys())
         url = (
             f"https://api.coingecko.com/api/v3/simple/price"
             f"?ids={ids}&vs_currencies=usd&include_24hr_change=true"
@@ -29,7 +21,7 @@ def get_top_tokens_data():
         data = response.json()
 
         results = []
-        for name, ticker in TOKENS.items():
+        for name, ticker in CRYPTO_TOKENS.items():
             info = data.get(name, {})
             price = info.get("usd")
             change = info.get("usd_24h_change")

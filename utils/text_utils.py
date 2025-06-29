@@ -9,6 +9,7 @@ import re
 import requests
 import spacy
 from functools import lru_cache
+from datetime import datetime
 import logging
 
 # Load spaCy model
@@ -242,7 +243,7 @@ def enrich_cashtags_with_price(text: str, prices: dict) -> str:
     return re.sub(r"\$[A-Z]{1,5}", replacer, text)
 
 def is_weekend():
-    return datetime.datetime.utcnow().weekday() in [5, 6]
+    return datetime.utcnow().weekday() in [5, 6]
 
 def percent_mentioned(part, value):
     # Match once, not as trailing duplicate
