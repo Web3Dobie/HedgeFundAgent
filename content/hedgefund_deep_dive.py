@@ -68,7 +68,7 @@ def post_hedgefund_deep_dive():
             change = data.get("change_percent")
             if price is not None and change is not None:
                 enriched_str = f"{tag} (${price:.2f}, {change:+.2f}%)"
-                pattern = re.compile(rf"\\{tag}\\b")
+                pattern = re.compile(rf"(?<!\w){re.escape(tag)}(?![\w])")
                 enriched_part = pattern.sub(enriched_str, enriched_part)
 
         enriched_part = insert_mentions(enriched_part)

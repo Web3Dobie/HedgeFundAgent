@@ -10,8 +10,8 @@ from utils.scorer import score_headlines
 from utils.gpt import generate_gpt_tweet
 from utils.text_utils import (
     insert_mentions, 
-    extract_cashtags,
-    is_valid_ticker,
+    extract_cashtags, 
+    is_valid_ticker
 )
 from utils.theme_tracker import load_recent_themes, extract_theme, is_duplicate_theme, track_theme
 from utils.fetch_stock_data import fetch_last_price_yf
@@ -62,9 +62,6 @@ def get_next_category():
     last_used_category = next_category
     return next_category
 
-def is_valid_ticker(tag: str) -> bool:
-    return tag.isupper() and tag.isalpha() and 1 <= len(tag) <= 5
-
 def post_hedgefund_comment():
     logger.info("\U0001f9e0 Generating hedge fund investor comment")
     scored_path = os.path.join(DATA_DIR, "scored_headlines.csv")
@@ -107,33 +104,31 @@ def post_hedgefund_comment():
 
     category = classify_headline(headline["headline"])
     prompt = build_prompt(headline["headline"], category)
-    core = generate_gpt_tweet(prompt)
-    if not core:
+    tweet = generate_gpt_tweet(prompt)
+    if not tweet:
         logger.error("GPT did not return a tweet.")
         return
 
-    cashtags = list(set(extract_cashtags(core)))
+    cashtags = extract_cashtags(tweet)
     logger.info(f"Extracted cashtags: {cashtags}")
 
     prices = {}
     for tag in cashtags:
         ticker = tag.strip("$")
-        if not is_valid_ticker(ticker):
-            continue
-        price_data = fetch_last_price_yf(ticker)
-        if price_data:
-            prices[tag] = price_data
+        if is_valid_ticker(ticker):
+            data = fetch_last_price_yf(ticker)
+            if data:
+                prices[tag] = data
 
-    # Clean replacement pass over the core tweet
     for tag, data in prices.items():
         price = data.get("price")
         change = data.get("change_percent")
         if price is not None and change is not None:
             enriched = f"{tag} (${price:.2f}, {change:+.2f}%)"
-            pattern = re.compile(rf"\\{tag}\\b")
-            core = pattern.sub(enriched, core)
+            pattern = re.compile(rf"(?<!\w){re.escape(tag)}(?![\w])")
+            tweet = pattern.sub(enriched, tweet)
 
-    tweet = insert_mentions(core)
+    tweet = insert_mentions(tweet)
     tweet = re.sub(
         r"This is my opinion\\. Not financial advice\\.*",
         "",
