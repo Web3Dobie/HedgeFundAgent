@@ -248,3 +248,13 @@ def percent_mentioned(part, value):
     # Match once, not as trailing duplicate
     return bool(re.search(rf"{re.escape(value)}(?:%|\\b)", part))
 
+def get_headlines_for_tickers(tickers: list[str], headlines: list[tuple]) -> list[tuple]:
+    """Return headlines where the ticker or company name appears."""
+    matched = []
+    for score, headline, url in headlines:
+        if any(ticker in headline.upper() for ticker in tickers):
+            matched.append((score, headline, url))
+    return matched
+
+def is_valid_ticker(tag: str) -> bool:
+    return tag.isupper() and tag.isalpha() and 1 <= len(tag) <= 5

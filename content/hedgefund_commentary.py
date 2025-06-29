@@ -9,15 +9,11 @@ from utils.headline_pipeline import fetch_and_score_headlines
 from utils.scorer import score_headlines
 from utils.gpt import generate_gpt_tweet
 from utils.text_utils import (
-    insert_cashtags, 
     insert_mentions, 
-    extract_cashtags, 
-    enhance_prompt_with_prices,
-    enrich_cashtags_with_price,
-    percent_mentioned,
+    extract_cashtags,
+    is_valid_ticker,
 )
 from utils.theme_tracker import load_recent_themes, extract_theme, is_duplicate_theme, track_theme
-
 from utils.fetch_stock_data import fetch_last_price_yf
 from utils.x_post import post_tweet
 from utils.hourly_utils import (
@@ -66,6 +62,9 @@ def get_next_category():
     last_used_category = next_category
     return next_category
 
+def is_valid_ticker(tag: str) -> bool:
+    return tag.isupper() and tag.isalpha() and 1 <= len(tag) <= 5
+
 def post_hedgefund_comment():
     logger.info("\U0001f9e0 Generating hedge fund investor comment")
     scored_path = os.path.join(DATA_DIR, "scored_headlines.csv")
@@ -113,58 +112,35 @@ def post_hedgefund_comment():
         logger.error("GPT did not return a tweet.")
         return
 
-    cashtags = set(extract_cashtags(core))
-    trailing = set(insert_cashtags(core).split())
-    cashtags.update(trailing)
-
-    logger.info(f"Total cashtags to enrich: {cashtags}")
+    cashtags = list(set(extract_cashtags(core)))
+    logger.info(f"Extracted cashtags: {cashtags}")
 
     prices = {}
     for tag in cashtags:
         ticker = tag.strip("$")
+        if not is_valid_ticker(ticker):
+            continue
         price_data = fetch_last_price_yf(ticker)
         if price_data:
             prices[tag] = price_data
 
-    if prices:
-        enhanced_prompt = enhance_prompt_with_prices(prompt, prices)
-        final_core = generate_gpt_tweet(enhanced_prompt) or core
-    else:
-        final_core = core
-
-    seen_tickers = set()
+    # Clean replacement pass over the core tweet
     for tag, data in prices.items():
-        if tag in seen_tickers:
-            continue
-
         price = data.get("price")
         change = data.get("change_percent")
-        price_str = f"${price:.2f}" if price is not None else ""
-        change_str = f"{change:+.2f}%" if change is not None else ""
+        if price is not None and change is not None:
+            enriched = f"{tag} (${price:.2f}, {change:+.2f}%)"
+            pattern = re.compile(rf"\\{tag}\\b")
+            core = pattern.sub(enriched, core)
 
-        already_has_price = price_str in final_core
-        already_has_change = percent_mentioned(final_core, change_str)
-
-        if tag in final_core and not (already_has_price and already_has_change):
-            addition = []
-            if price_str and not already_has_price:
-                addition.append(price_str)
-            if change_str and not already_has_change:
-                addition.append(change_str)
-            if addition:
-                final_core += f" ({', '.join(addition)})"
-                seen_tickers.add(tag)
-
-    if "$" not in final_core:
-        final_core = insert_cashtags(final_core)
-    final_core = insert_mentions(final_core)
-    final_core = re.sub(
+    tweet = insert_mentions(core)
+    tweet = re.sub(
         r"This is my opinion\\. Not financial advice\\.*",
         "",
-        final_core,
+        tweet,
         flags=re.IGNORECASE
     ).strip()
-    tweet = f"{final_core}\n\n{DISCLAIMER}"
+    tweet += f"\n\n{DISCLAIMER}"
 
     logger.info(f"Using theme: {theme}")
     logger.info(f"Using category: {category}")

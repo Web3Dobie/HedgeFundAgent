@@ -5,11 +5,9 @@ from utils.headline_pipeline import get_top_headline_today
 from utils.gpt import generate_gpt_thread
 from utils.theme_tracker import extract_theme
 from utils.text_utils import (
-    insert_mentions, 
-    insert_cashtags, 
+    insert_mentions,
     extract_cashtags,
-    enrich_cashtags_with_price,
-    percent_mentioned,
+    is_valid_ticker
 )
 from utils.x_post import post_thread
 from utils.fetch_stock_data import fetch_last_price_yf
@@ -42,18 +40,14 @@ def post_hedgefund_deep_dive():
         logger.error("GPT did not return a valid deep-dive thread.")
         return
 
-    # Collect cashtags from all parts
+    # Extract unique cashtags from all parts
     all_cashtags = set()
     for part in thread:
         all_cashtags.update(extract_cashtags(part))
 
-    if not all_cashtags:
-        logger.info("No cashtags found — skipping price enrichment.")
+    all_cashtags = set(tag for tag in all_cashtags if is_valid_ticker(tag.strip("$")))
 
-    # Optionally cap to avoid excessive lookups
-    all_cashtags = set(list(all_cashtags)[:5])
-
-    logger.info(f"Identified cashtags for thread enrichment: {all_cashtags}")
+    logger.info(f"Valid cashtags for enrichment: {all_cashtags}")
 
     # Fetch prices using yfinance
     prices = {}
@@ -65,36 +59,18 @@ def post_hedgefund_deep_dive():
 
     logger.info(f"Fetched price data: {prices}")
 
-    # Enrich each thread part
+    # Replace each cashtag with enriched format in each thread part
     enriched = []
-    for i, part in enumerate(thread):
+    for part in thread:
         enriched_part = part
-        seen_tickers = set()
-
         for tag, data in prices.items():
-            if tag in seen_tickers:
-                continue  # already enriched this tag in this part
-
             price = data.get("price")
             change = data.get("change_percent")
-            price_str = f"${price:.2f}" if price is not None else ""
-            change_str = f"{change:+.2f}%" if change is not None else ""
+            if price is not None and change is not None:
+                enriched_str = f"{tag} (${price:.2f}, {change:+.2f}%)"
+                pattern = re.compile(rf"\\{tag}\\b")
+                enriched_part = pattern.sub(enriched_str, enriched_part)
 
-            already_has_price = price_str in enriched_part
-            already_has_change = percent_mentioned(enriched_part, change_str)
-
-            if f"{tag}" in enriched_part and not (already_has_price and already_has_change):
-                addition = []
-                if price_str and not already_has_price:
-                    addition.append(price_str)
-                if change_str and not already_has_change:
-                    addition.append(change_str)
-                if addition:
-                    enriched_part += f" ({', '.join(addition)})"
-                    seen_tickers.add(tag)  # mark as used
-
-        if '$' not in enriched_part:
-            enriched_part = insert_cashtags(enriched_part)
         enriched_part = insert_mentions(enriched_part)
         enriched.append(enriched_part)
 
@@ -109,5 +85,4 @@ def post_hedgefund_deep_dive():
 
     # Post the full thread
     post_thread(enriched, category="deep_dive", theme=extract_theme(top_headline["headline"]))
-
     logger.info("\u2705 Deep-dive thread posted successfully.")
