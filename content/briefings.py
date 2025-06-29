@@ -10,9 +10,15 @@ from utils.fetch_token_data import get_top_tokens_data
 from data.ticker_blocks import ASIA_EQUITY, EUROPE_EQUITY, US_EQUITY, FX_PAIRS, COMMODITIES, RATES, CRYPTO 
 from utils.fetch_token_data import get_top_tokens_data
 from utils.gpt import generate_gpt_text
+from x_post import post_pdf_briefing
 
 BRIEFING_DIR = os.path.join(DATA_DIR, "briefings")
 os.makedirs(BRIEFING_DIR, exist_ok=True)
+
+def run_morning_briefing():
+    logging.info("Generating morning market briefing PDF")
+    pdf_path = generate_briefing_pdf("morning")  # generates the PDF
+    post_pdf_briefing(pdf_path, period="morning")  # posts it
 
 def format_price(label, val, ticker=None):
     try:

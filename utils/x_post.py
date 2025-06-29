@@ -222,6 +222,39 @@ def post_tweet(text: str, category: str, theme: str):
     except Exception as e:
         logging.error(f"❌ Error posting tweet: {e}")
 
+# ─── PDF Tweet ────────────────────────────────────────────────────────
+def post_pdf_briefing(filepath: str, period: str = "morning"):
+    """
+    Uploads a PDF briefing and posts it to X with a caption.
+    """
+    if has_reached_daily_limit():
+        logging.warning(f"🚫 Daily tweet limit reached — skipping {period} briefing.")
+        return
+
+    caption = f"{period.capitalize()} Market Briefing 🧠\n{datetime.utcnow().strftime('%Y-%m-%d')}\n#macro #markets #hedgefund"
+
+    try:
+        media = api.media_upload(filename=filepath, media_category="tweet_video")  # Force PDF-type file
+        media_id = media.media_id
+        resp = client.create_tweet(text=caption, media_ids=[media_id])
+        tweet_id = resp.data['id']
+        url = f"https://x.com/{BOT_USER_ID}/status/{tweet_id}"
+        date_str = datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
+
+        log_tweet_to_csv(
+            tweet_id=tweet_id,
+            timestamp=date_str,
+            tweet_type="briefing",
+            category="briefing",
+            theme=period,
+            url=url
+        )
+
+        logging.info(f"✅ Posted {period} briefing: {url}")
+    except Exception as e:
+        logging.error(f"❌ Failed to post {period} briefing: {e}")
+
+
 # ─── Quote Tweet ────────────────────────────────────────────────────────
 def post_quote_tweet(text: str, tweet_url: str, category: str, theme: str):
     if has_reached_daily_limit():
