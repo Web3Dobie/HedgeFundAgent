@@ -10,7 +10,7 @@ from utils.fetch_token_data import get_top_tokens_data
 from data.ticker_blocks import ASIA_EQUITY, EUROPE_EQUITY, US_EQUITY, FX_PAIRS, COMMODITIES, RATES, CRYPTO 
 from utils.fetch_token_data import get_top_tokens_data
 from utils.gpt import generate_gpt_text
-from x_post import post_pdf_briefing
+from utils.x_post import post_pdf_briefing
 
 BRIEFING_DIR = os.path.join(DATA_DIR, "briefings")
 os.makedirs(BRIEFING_DIR, exist_ok=True)
