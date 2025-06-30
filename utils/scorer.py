@@ -10,6 +10,7 @@ from datetime import datetime
 from .config import DATA_DIR, LOG_DIR
 from .gpt import generate_gpt_text
 from .text_utils import classify_headline_topic  # new utility we'll add for tagging
+from .article_summarizer import summarize_url
 
 # Configure logging
 log_file = os.path.join(LOG_DIR, "scorer.log")
@@ -38,19 +39,20 @@ def score_headlines(items: list[dict], min_score: int = 8) -> list[dict]:
         item.setdefault("url", "")
         item.setdefault("timestamp", datetime.utcnow().isoformat())
         
+        summary = item.get("summary", "").strip()
+
         # Generate prompt for GPT
         prompt = (
-            f"As a hedge fund analyst, rate this headline's market impact from 1-10:\n"
-            f"'{item['headline']}'\n\n"
-            f"Consider these factors:\n"
-            f"- Immediate market moving potential (price action)\n"
-            f"- Broader economic implications\n"
-            f"- Policy/regulatory impact\n"
-            f"- Sector-wide effects\n"
-            f"- Geopolitical significance\n"
-            f"- Trading volume implications\n\n"
-            f"Score 8-10 for headlines that combine multiple major factors.\n"
-            f"Return only the number."
+            "As a hedge fund analyst, rate this story's market impact from 1-10.\n\n"
+            f"Headline:\n{item['headline']}\n\n"
+            f"Summary:\n{summary if summary else '[No summary available]'}\n\n"
+            "Score based on:\n"
+            "- Immediate price action potential\n"
+            "- Broader economic/policy implications\n"
+            "- Sector-wide or geopolitical relevance\n"
+            "- Unusual or market-moving information\n\n"
+            "Score 8-10 for headlines with significant, multi-asset, or urgent impact.\n"
+            "Return only the number."
         )
         # Generate GPT response
         raw = generate_gpt_text(prompt, max_tokens=10)
@@ -105,10 +107,21 @@ def score_headlines(items: list[dict], min_score: int = 8) -> list[dict]:
             
         # Only include items meeting minimum score
         if item['score'] >= min_score:
+            # Add summary if not already present
+            if item.get("url"):
+                try:
+                    item["summary"] = summarize_url(item["url"])
+                except Exception as e:
+                    logging.warning(f"Failed to fetch summary for {item['url']}: {e}")
+                    item["summary"] = ""
+            else:
+                item["summary"] = ""
+
             _append_to_csv({
                 "headline": headline,
                 "url": item.get("url", ""),
                 "ticker": item.get("ticker", ""),
+                "summary": item.get("summary", ""),
                 "score": item['score'],
                 "timestamp": item.get("timestamp", datetime.utcnow().isoformat()),
             })
@@ -137,11 +150,12 @@ def _append_to_csv(record: dict):
     logging.info(f"[DEBUG] Writing to {os.path.abspath(SCORED_CSV)}: {record}")
 
     try:
-        header = ["score", "headline", "url", "ticker", "timestamp", "used_in_hourly_commentary"]
+        header = ["score", "headline", "url", "ticker", "summary", "timestamp", "used_in_hourly_commentary"]
         os.makedirs(DATA_DIR, exist_ok=True)
         write_header = not os.path.exists(SCORED_CSV)
 
         record.setdefault("used_in_hourly_commentary", "False")
+        record.setdefault("summary", "")
 
         with open(SCORED_CSV, "a", newline="", encoding="utf-8") as f:
             writer = csv.DictWriter(f, fieldnames=header)

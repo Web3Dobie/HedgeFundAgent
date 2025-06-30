@@ -14,13 +14,20 @@ from utils.fetch_stock_data import fetch_last_price_yf
 
 logger = logging.getLogger("hedgefund_deep_dive")
 
-def build_deep_dive_prompt(headline: str) -> str:
+def build_deep_dive_prompt(headline: str, summary: str) -> str:
+    context = f"Headline: {headline.strip()}\n\nSummary: {summary.strip() or '[No summary available]'}"
+
     return (
-        f"Write a 5-part Twitter thread like a hedge fund investor explaining this news: '{headline}'.\n"
+        f"Write a 5-part Twitter thread like a hedge fund investor explaining this story.\n\n"
+        f"{context}\n\n"
         f"Whenever you mention a stock ticker (cashtag like $XYZ), always include latest price and percent change "
-        f"in this format: $XYZ ($123.45, +1.23%).\n"
-        f"1. Explain the news\n2. What markets care about\n3. Implications (macro or stock-specific)\n"
-        f"4. Similar historical precedent if any\n5. View or positioning insight. Be analytical, not hypey."
+        f"in this format: $XYZ ($123.45, +1.23%).\n\n"
+        f"Structure the thread:\n"
+        f"1. Explain the news\n"
+        f"2. What markets care about\n"
+        f"3. Implications (macro or stock-specific)\n"
+        f"4. Similar historical precedent if any\n"
+        f"5. View or positioning insight. Be analytical, not hypey."
     )
 
 def post_hedgefund_deep_dive():
@@ -33,7 +40,7 @@ def post_hedgefund_deep_dive():
 
     logger.info(f"Selected deep dive headline: {top_headline['headline']}")
 
-    prompt = build_deep_dive_prompt(top_headline["headline"])
+    prompt = build_deep_dive_prompt(top_headline["headline"], top_headline.get("summary", ""))
     thread = generate_gpt_thread(prompt, max_parts=5)
 
     if not thread or len(thread) < 3:

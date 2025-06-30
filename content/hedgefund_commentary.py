@@ -44,11 +44,17 @@ def classify_headline(headline: str) -> str:
     else:
         return random.choice([CATEGORY_MACRO, CATEGORY_POLITICAL, CATEGORY_EQUITY])
 
-def build_prompt(headline: str, category: str) -> str:
-    return (
-        f"Comment on this political/macro headline like a global macro hedge fund PM: '{headline}'. "
-        f"Whenever you mention a stock ticker (cashtag like $XYZ), include the cashtag; my system will insert price and percent change."
-    )
+def build_prompt(headline: str, summary: str, category: str) -> str:
+    context = f"Headline: {headline.strip()}\n\nSummary: {summary.strip() or '[No summary available]'}"
+
+    base = "Whenever you mention a stock ticker (cashtag like $XYZ), include the cashtag; my system will insert price and percent change."
+
+    if category == CATEGORY_MACRO:
+        return f"Comment on this macro headline like a global macro hedge fund PM:\n\n{context}\n\n{base}"
+    elif category == CATEGORY_POLITICAL:
+        return f"Comment on this political headline like a hedge fund strategist:\n\n{context}\n\n{base}"
+    else:
+        return f"Comment on this financial/corporate headline like an equity hedge fund PM:\n\n{context}\n\n{base}"
 
 def get_next_category():
     global last_used_category
@@ -103,7 +109,8 @@ def post_hedgefund_comment():
         theme = extract_theme(headline["headline"])
 
     category = classify_headline(headline["headline"])
-    prompt = build_prompt(headline["headline"], category)
+    prompt = build_prompt(headline["headline"], headline.get("summary", ""), category)
+
     tweet = generate_gpt_tweet(prompt)
     if not tweet:
         logger.error("GPT did not return a tweet.")

@@ -111,7 +111,7 @@ def rotate_logs():
     # Rolling retention for scored headlines
     rotate_file(
         os.path.join(DATA_DIR, "scored_headlines.csv"),
-        headers=["score", "headline", "url", "ticker", "timestamp"," used_in_hourly_commentary"],
+        headers=["score", "headline", "url", "ticker", "summary", "timestamp"," used_in_hourly_commentary"],
         rolling=True
     )
 
