@@ -12,6 +12,8 @@ from utils.fetch_token_data import get_top_tokens_data
 from utils.gpt import generate_gpt_text
 from utils.x_post import post_pdf_briefing
 
+import logging
+
 BRIEFING_DIR = os.path.join(DATA_DIR, "briefings")
 os.makedirs(BRIEFING_DIR, exist_ok=True)
 

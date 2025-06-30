@@ -8,6 +8,8 @@ import threading
 import time
 from datetime import datetime, timezone
 import tweepy
+from pdf2image import convert_from_path
+import tempfile
 
 from utils.telegram_log_handler import TelegramHandler
 from .config import (
@@ -222,11 +224,8 @@ def post_tweet(text: str, category: str, theme: str):
     except Exception as e:
         logging.error(f"❌ Error posting tweet: {e}")
 
-# ─── PDF Tweet ────────────────────────────────────────────────────────
+# ─── PDF Tweet as PNG ────────────────────────────────────────────────────────
 def post_pdf_briefing(filepath: str, period: str = "morning"):
-    """
-    Uploads a PDF briefing and posts it to X with a caption.
-    """
     if has_reached_daily_limit():
         logging.warning(f"🚫 Daily tweet limit reached — skipping {period} briefing.")
         return
@@ -234,10 +233,29 @@ def post_pdf_briefing(filepath: str, period: str = "morning"):
     caption = f"{period.capitalize()} Market Briefing 🧠\n{datetime.utcnow().strftime('%Y-%m-%d')}\n#macro #markets #hedgefund"
 
     try:
-        media = api.media_upload(filename=filepath, media_category="tweet_video")  # Force PDF-type file
-        media_id = media.media_id
-        resp = client.create_tweet(text=caption, media_ids=[media_id])
-        tweet_id = resp.data['id']
+        # Convert all PDF pages to images
+        images = convert_from_path(filepath, dpi=200)
+        if not images:
+            logging.error("❌ PDF conversion failed — no pages rendered.")
+            return
+
+        # Save images to temp directory
+        temp_dir = tempfile.mkdtemp()
+        image_paths = []
+        for i, image in enumerate(images):
+            img_path = os.path.join(temp_dir, f"page_{i + 1}.png")
+            image.save(img_path, "PNG")
+            image_paths.append(img_path)
+
+        # Upload all images
+        media_ids = []
+        for img in image_paths:
+            media = api.media_upload(filename=img)
+            media_ids.append(media.media_id)
+
+        # First tweet with first image + caption
+        resp = client.create_tweet(text=caption, media_ids=[media_ids[0]])
+        tweet_id = resp.data["id"]
         url = f"https://x.com/{BOT_USER_ID}/status/{tweet_id}"
         date_str = datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
 
@@ -249,11 +267,26 @@ def post_pdf_briefing(filepath: str, period: str = "morning"):
             theme=period,
             url=url
         )
+        logging.info(f"✅ Posted first tweet in {period} briefing thread: {url}")
 
-        logging.info(f"✅ Posted {period} briefing: {url}")
+        # Post rest of the pages as replies
+        for i in range(1, len(media_ids)):
+            time.sleep(5)
+            resp = client.create_tweet(
+                media_ids=[media_ids[i]],
+                in_reply_to_tweet_id=tweet_id
+            )
+            tweet_id = resp.data["id"]
+            url = f"https://x.com/{BOT_USER_ID}/status/{tweet_id}"
+            logging.info(f"↪️ Posted page {i+1} of briefing: {url}")
+
+        # Optional: Clean up temp files
+        for img_path in image_paths:
+            os.remove(img_path)
+        os.rmdir(temp_dir)
+
     except Exception as e:
-        logging.error(f"❌ Failed to post {period} briefing: {e}")
-
+        logging.error(f"❌ Failed to post {period} briefing thread: {e}")
 
 # ─── Quote Tweet ────────────────────────────────────────────────────────
 def post_quote_tweet(text: str, tweet_url: str, category: str, theme: str):
