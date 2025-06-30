@@ -1,6 +1,6 @@
 """
 GPT-based scoring for hedge fund investor headlines.
-Logs scores to CSV (and optionally to Notion).
+Logs scores to category-specific CSVs with trend boosting.
 """
 import csv
 import logging
@@ -9,10 +9,10 @@ from datetime import datetime
 
 from .config import DATA_DIR, LOG_DIR
 from .gpt import generate_gpt_text
-from .text_utils import classify_headline_topic  # new utility we'll add for tagging
+from .text_utils import classify_headline_topic
 from .article_summarizer import summarize_url
 
-# Configure logging
+# Logging setup
 log_file = os.path.join(LOG_DIR, "scorer.log")
 os.makedirs(os.path.dirname(log_file), exist_ok=True)
 logging.basicConfig(
@@ -21,27 +21,26 @@ logging.basicConfig(
     format="%(asctime)s - %(levelname)s - %(message)s",
 )
 
-SCORED_CSV = os.path.join(DATA_DIR, "scored_headlines.csv")
+CATEGORY_THRESHOLDS = {
+    "equity": 6,
+    "macro": 8,
+    "political": 7,
+}
 
-def score_headlines(items: list[dict], min_score: int = 8) -> list[dict]:
-    logging.info(f"SCORED_CSV full path: {os.path.abspath(SCORED_CSV)}")
-
-    """
-    Score headlines using GPT with enhanced scoring system.
-    Returns list of headlines scored >= min_score.
-    """
-    # Step 1: Score all headlines first with more detailed criteria
+def score_headlines(items: list[dict]) -> list[dict]:
+    logging.info("Scoring headlines with trend detection and category routing...")
     scored_items = []
-    
-    failed_count=0
+    failed_count = 0
+
+    # Step 1: Score each headline individually
     for item in items:
-        item.setdefault("score", 1)  # Default score if not set
+        item.setdefault("score", 1)
         item.setdefault("url", "")
         item.setdefault("timestamp", datetime.utcnow().isoformat())
-        
-        summary = item.get("summary", "").strip()
+        item["category"] = classify_headline_topic(item.get("headline", ""))
+        item["ticker"] = item["category"]
 
-        # Generate prompt for GPT
+        summary = item.get("summary", "").strip()
         prompt = (
             "As a hedge fund analyst, rate this story's market impact from 1-10.\n\n"
             f"Headline:\n{item['headline']}\n\n"
@@ -54,30 +53,24 @@ def score_headlines(items: list[dict], min_score: int = 8) -> list[dict]:
             "Score 8-10 for headlines with significant, multi-asset, or urgent impact.\n"
             "Return only the number."
         )
-        # Generate GPT response
         raw = generate_gpt_text(prompt, max_tokens=10)
 
         if not raw or raw.strip() == "":
-            logging.error(f"GPT returned an empty response for headline: '{item['headline']}'")
+            logging.error(f"GPT returned empty for: {item['headline']}")
+            item["score"] = 1
             failed_count += 1
-            item['score'] = 1  # Assign default score for empty GPT response
         else:
             try:
-                # Parse and constrain score between 1 and 10
-                item['score'] = parse_score(raw)  # Assume parse_score is implemented correctly
-                logging.info(f"Headline scored: {item['headline']} | Score: {item['score']}")
+                item["score"] = parse_score(raw)
+                logging.info(f"Scored: {item['headline']} | {item['score']}")
             except Exception as e:
-                logging.error(f"Failed to parse GPT response for headline: '{item['headline']}', Error: {e}")
-                item['score'] = 1  # Default score for parsing failure
+                logging.error(f"Score parse failed: {item['headline']} | Error: {e}")
+                item["score"] = 1
                 failed_count += 1
 
-        # Append item with updated score to the result list (only if >= min_score)
-        if item['score'] >= min_score:
-            item["ticker"] = classify_headline_topic(item.get("headline", ""))
-            scored_items.append(item)
+        scored_items.append(item)
 
-    logging.info(f"Total headlines processed: {len(items)}")
-    logging.info(f"Total GPT failures: {failed_count}")
+    logging.info(f"Total scored: {len(scored_items)} | Failures: {failed_count}")
 
     # Step 2: Enhanced trend detection
     batch = "\n".join(f"- {i['headline']}" for i in scored_items)
@@ -96,82 +89,62 @@ def score_headlines(items: list[dict], min_score: int = 8) -> list[dict]:
     hot_lines = generate_gpt_text(trend_prompt, max_tokens=200).splitlines()
     hot_set = set(h.strip() for h in hot_lines)
 
-    # Step 3: Apply enhanced boost for trending themes
+    # Step 3: Apply trend boost and write to category CSV if above category threshold
     results = []
     for item in scored_items:
-        headline = item['headline']
-        # Boost score for trending themes (+3 instead of +2)
+        headline = item["headline"]
         if headline in hot_set:
-            item['score'] = min(10, item['score'] + 3)
-            logging.info(f"Headline boosted: {headline} | Boosted score: {item['score']}")
-            
-        # Only include items meeting minimum score
-        if item['score'] >= min_score:
-            # Add summary if not already present
-            if item.get("url"):
+            item["score"] = min(10, item["score"] + 3)
+            logging.info(f"Trend boost: {headline} | New score: {item['score']}")
+
+        category = item["category"]
+        threshold = CATEGORY_THRESHOLDS.get(category, 8)
+
+        if item["score"] >= threshold:
+            if item.get("url") and not item.get("summary"):
                 try:
                     item["summary"] = summarize_url(item["url"])
                 except Exception as e:
-                    logging.warning(f"Failed to fetch summary for {item['url']}: {e}")
+                    logging.warning(f"Summary fetch failed for {item['url']}: {e}")
                     item["summary"] = ""
             else:
-                item["summary"] = ""
+                item.setdefault("summary", "")
 
-            _append_to_csv({
-                "headline": headline,
-                "url": item.get("url", ""),
-                "ticker": item.get("ticker", ""),
-                "summary": item.get("summary", ""),
-                "score": item['score'],
-                "timestamp": item.get("timestamp", datetime.utcnow().isoformat()),
-            })
+            _append_to_category_csv(item)
             results.append(item)
 
     return results
 
 def parse_score(raw_response: str) -> int:
-    """
-    Parse the score returned by GPT, ensuring it's between 1 and 10.
-    Args:
-        raw_response (str): Raw GPT response.
-    Returns:
-        int: Parsed score (default to 1 for failures).
-    """
     try:
-        # Attempt to parse numeric value
         score = float(raw_response.strip())
         return min(10, max(1, int(round(score))))
     except ValueError:
-        logging.error(f"Failed to parse score from response: '{raw_response}'")
-        return 1  # Default score on failure
+        logging.error(f"Failed to parse score: '{raw_response}'")
+        return 1
 
+def _append_to_category_csv(record: dict):
+    category = record.get("category", "macro")
+    filepath = os.path.join(DATA_DIR, f"scored_headlines_{category}.csv")
+    header = ["score", "headline", "url", "ticker", "summary", "timestamp", "used_in_hourly_commentary"]
+    write_header = not os.path.exists(filepath)
 
-def _append_to_csv(record: dict):
-    logging.info(f"[DEBUG] Writing to {os.path.abspath(SCORED_CSV)}: {record}")
+    record.setdefault("used_in_hourly_commentary", "False")
+    record.setdefault("summary", "")
 
     try:
-        header = ["score", "headline", "url", "ticker", "summary", "timestamp", "used_in_hourly_commentary"]
-        os.makedirs(DATA_DIR, exist_ok=True)
-        write_header = not os.path.exists(SCORED_CSV)
-
-        record.setdefault("used_in_hourly_commentary", "False")
-        record.setdefault("summary", "")
-
-        with open(SCORED_CSV, "a", newline="", encoding="utf-8") as f:
+        with open(filepath, "a", newline="", encoding="utf-8") as f:
             writer = csv.DictWriter(f, fieldnames=header)
             if write_header:
-                logging.info(f"Writing header to {SCORED_CSV}")
                 writer.writeheader()
             writer.writerow(record)
-            logging.info(f"Appended to CSV: {record}")
     except Exception as e:
-        logging.error(f"Failed to write to CSV: {e}")
+        logging.error(f"Write failed for {filepath}: {e}")
         raise
-
 
 def write_headlines(records: list[dict]):
     for rec in records:
         rec.setdefault("url", "")
         rec.setdefault("ticker", classify_headline_topic(rec.get("headline", "")))
         rec.setdefault("timestamp", datetime.utcnow().isoformat())
-        _append_to_csv(rec)
+        _append_to_category_csv(rec)

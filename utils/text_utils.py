@@ -8,9 +8,11 @@ Text utility functions for generating tweet content:
 import re
 import requests
 import spacy
+import csv
 from functools import lru_cache
 from datetime import datetime
 import logging
+from utils.config import DATA_DIR
 
 # Load spaCy model
 _NLP = spacy.load("en_core_web_sm")
@@ -259,3 +261,14 @@ def get_headlines_for_tickers(tickers: list[str], headlines: list[tuple]) -> lis
 
 def is_valid_ticker(tag: str) -> bool:
     return tag.isupper() and tag.isalpha() and 1 <= len(tag) <= 5
+
+def fetch_scored_headlines(category: str) -> list[dict]:
+    """
+    Load scored headlines from the category-specific CSV.
+    """
+    path = os.path.join(DATA_DIR, f"scored_headlines_{category}.csv")
+    if not os.path.exists(path):
+        return []
+
+    with open(path, newline="", encoding="utf-8") as f:
+        return list(csv.DictReader(f))

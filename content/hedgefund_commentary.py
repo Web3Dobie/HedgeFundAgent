@@ -11,7 +11,8 @@ from utils.gpt import generate_gpt_tweet
 from utils.text_utils import (
     insert_mentions, 
     extract_cashtags, 
-    is_valid_ticker
+    is_valid_ticker,
+    fetch_scored_headlines
 )
 from utils.theme_tracker import load_recent_themes, extract_theme, is_duplicate_theme, track_theme
 from utils.fetch_stock_data import fetch_last_price_yf
@@ -70,15 +71,16 @@ def get_next_category():
 
 def post_hedgefund_comment():
     logger.info("\U0001f9e0 Generating hedge fund investor comment")
-    scored_path = os.path.join(DATA_DIR, "scored_headlines.csv")
-    if not os.path.exists(scored_path):
-        logger.warning("No scored headlines found.")
+
+    # Step 1: Choose category and fetch scored headlines
+    target_category = get_next_category()
+    rows = fetch_scored_headlines(target_category)
+    if not rows:
+        logger.warning(f"No scored headlines found for category '{target_category}'")
         return
 
+    # Step 2: Filter to today's unused headlines
     today = datetime.utcnow().date().isoformat()
-    with open(scored_path, newline="", encoding="utf-8") as f:
-        rows = list(csv.DictReader(f))
-
     recent = [
         r for r in rows
         if r.get("timestamp", "").startswith(today) and
@@ -88,12 +90,10 @@ def post_hedgefund_comment():
         logger.warning("No unused headlines available for hourly commentary.")
         return
 
-    target_category = get_next_category()
-    candidates = [r for r in recent if classify_headline(r["headline"]) == target_category]
-    if not candidates:
-        logger.warning(f"No headlines available for category '{target_category}', falling back to all recent.")
-        candidates = recent
+    # Step 3: Use headlines in this category (they already are) as candidates
+    candidates = recent
 
+    # Step 4: Select highest scoring non-duplicate theme
     selected = None
     for r in sorted(candidates, key=lambda r: int(r["score"]), reverse=True):
         t = extract_theme(r["headline"])
@@ -108,7 +108,7 @@ def post_hedgefund_comment():
         headline = candidates[0]
         theme = extract_theme(headline["headline"])
 
-    category = classify_headline(headline["headline"])
+    category = classify_headline(headline["headline"])  # still used to format prompt
     prompt = build_prompt(headline["headline"], headline.get("summary", ""), category)
 
     tweet = generate_gpt_tweet(prompt)
@@ -132,7 +132,7 @@ def post_hedgefund_comment():
         change = data.get("change_percent")
         if price is not None and change is not None:
             enriched = f"{tag} (${price:.2f}, {change:+.2f}%)"
-            pattern = re.compile(rf"(?<!\w){re.escape(tag)}(?![\w])")
+            pattern = re.compile(rf"(?<!\\w){re.escape(tag)}(?![\\w])")
             tweet = pattern.sub(enriched, tweet)
 
     tweet = insert_mentions(tweet)
@@ -142,14 +142,14 @@ def post_hedgefund_comment():
         tweet,
         flags=re.IGNORECASE
     ).strip()
-    tweet += f"\n\n{DISCLAIMER}"
+    tweet += f"\\n\\n{DISCLAIMER}"
 
     logger.info(f"Using theme: {theme}")
     logger.info(f"Using category: {category}")
     post_tweet(tweet, category=category, theme=theme)
     mark_headline_used_in_hourly_commentary(headline["headline"])
     track_theme(theme)
-    logger.info(f"\u2705 Posted hedge fund commentary tweet: {tweet}")
+    logger.info(f"\\u2705 Posted hedge fund commentary tweet: {tweet}")
 
 if __name__ == "__main__":
     load_recent_themes()
