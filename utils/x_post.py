@@ -230,16 +230,12 @@ def post_pdf_briefing(filepath: str, period: str = "morning"):
         logging.warning(f"🚫 Daily tweet limit reached — skipping {period} briefing.")
         return
 
-    caption = f"{period.capitalize()} Market Briefing 🧠\n{datetime.utcnow().strftime('%Y-%m-%d')}\n#macro #markets #hedgefund"
-
     try:
-        # Convert all PDF pages to images
         images = convert_from_path(filepath, dpi=200)
         if not images:
             logging.error("❌ PDF conversion failed — no pages rendered.")
             return
 
-        # Save images to temp directory
         temp_dir = tempfile.mkdtemp()
         image_paths = []
         for i, image in enumerate(images):
@@ -247,18 +243,23 @@ def post_pdf_briefing(filepath: str, period: str = "morning"):
             image.save(img_path, "PNG")
             image_paths.append(img_path)
 
-        # Upload all images
-        media_ids = []
-        for img in image_paths:
-            media = api.media_upload(filename=img)
-            media_ids.append(media.media_id)
+        # Upload images
+        media_ids = [api.media_upload(filename=img).media_id for img in image_paths]
 
-        # First tweet with first image + caption
+        total_pages = len(media_ids)
+
+        # --- First Tweet with 🧵 and Page 1/N ---
+        caption = (
+            f"{period.capitalize()} Market Briefing 🧠🧵 "
+            f"{datetime.utcnow().strftime('%Y-%m-%d')}\n"
+            f"Page 1/{total_pages}\n"
+            f"#macro #markets #hedgefund"
+        )
         resp = client.create_tweet(text=caption, media_ids=[media_ids[0]])
         tweet_id = resp.data["id"]
+
         url = f"https://x.com/{BOT_USER_ID}/status/{tweet_id}"
         date_str = datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
-
         log_tweet_to_csv(
             tweet_id=tweet_id,
             timestamp=date_str,
@@ -267,22 +268,23 @@ def post_pdf_briefing(filepath: str, period: str = "morning"):
             theme=period,
             url=url
         )
-        logging.info(f"✅ Posted first tweet in {period} briefing thread: {url}")
+        logging.info(f"✅ Posted page 1 of {period} briefing: {url}")
 
-        # Post rest of the pages as replies
-        for i in range(1, len(media_ids)):
+        # --- Replies for remaining pages ---
+        for i in range(1, total_pages):
             time.sleep(5)
+            footer = f"Page {i+1}/{total_pages}"
             resp = client.create_tweet(
+                text=footer,
                 media_ids=[media_ids[i]],
                 in_reply_to_tweet_id=tweet_id
             )
             tweet_id = resp.data["id"]
-            url = f"https://x.com/{BOT_USER_ID}/status/{tweet_id}"
-            logging.info(f"↪️ Posted page {i+1} of briefing: {url}")
+            logging.info(f"↪️ Posted page {i+1}: https://x.com/{BOT_USER_ID}/status/{tweet_id}")
 
-        # Optional: Clean up temp files
-        for img_path in image_paths:
-            os.remove(img_path)
+        # Cleanup
+        for path in image_paths:
+            os.remove(path)
         os.rmdir(temp_dir)
 
     except Exception as e:
