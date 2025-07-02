@@ -25,7 +25,7 @@ from utils.gpt import generate_gpt_text
 from utils.x_post import timed_post_pdf_briefing
 from utils.fetch_stock_data import get_top_movers_from_constituents, fetch_stock_news
 from utils.fetch_calendars import (
-    get_econ_calendar_tradingview,
+    scrape_investing_econ_calendar,
     get_ipo_calendar,
     get_earnings_calendar,
 )
@@ -94,7 +94,7 @@ def generate_briefing_pdf(briefing_type: str = "morning") -> str:
     limit = 5  # Number of top movers to show
     
     # Fetch calendar data
-    econ_df = get_econ_calendar_tradingview(countries=["US"], days=1)
+    econ_df = scrape_investing_econ_calendar()
     ipo_list = get_ipo_calendar()
     earnings_list = get_earnings_calendar()
 

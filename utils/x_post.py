@@ -210,7 +210,16 @@ def timed_post_pdf_briefing(filepath: str, period: str = "morning", headline=Non
             delay = RETRY_DELAYS[retry_count]
             logging.warning(f"⚠️ PDF post attempt {retry_count+1} failed: {e}. Retrying in {delay}s.")
             time.sleep(delay)
-            return timed_post_pdf_briefing(filepath, period, headline, summary, equity_block, macro_block, crypto_block, retry_count + 1)
+            return timed_post_pdf_briefing(
+                filepath=filepath,
+                period=period,
+                headline=headline,
+                summary=summary,
+                equity_block=equity_block,
+                macro_block=macro_block,
+                crypto_block=crypto_block,
+                retry_count=retry_count + 1
+            )
 
         logging.error(f"❌ PDF post failed after {elapsed:.2f}s: {e}")
         raise
