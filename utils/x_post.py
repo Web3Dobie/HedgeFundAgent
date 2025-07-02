@@ -11,6 +11,7 @@ import tweepy
 from pdf2image import convert_from_path
 import tempfile
 
+from utils.text_utils import get_briefing_caption, format_market_sentiment
 from utils.telegram_log_handler import TelegramHandler
 from .config import (
     LOG_DIR,
@@ -225,39 +226,29 @@ def post_tweet(text: str, category: str, theme: str):
         logging.error(f"❌ Error posting tweet: {e}")
 
 # ─── PDF Tweet as PNG ────────────────────────────────────────────────────────
-def post_pdf_briefing(filepath: str, period: str = "morning"):
+def post_pdf_briefing(filepath: str, period: str = "morning", headline=None, summary=None, 
+                     equity_block=None, macro_block=None, crypto_block=None):
     if has_reached_daily_limit():
         logging.warning(f"🚫 Daily tweet limit reached — skipping {period} briefing.")
         return
 
     try:
-        images = convert_from_path(filepath, dpi=200)
+        images = convert_from_path(filepath, dpi=200, first_page=1, last_page=1)
         if not images:
             logging.error("❌ PDF conversion failed — no pages rendered.")
             return
 
         temp_dir = tempfile.mkdtemp()
-        image_paths = []
-        for i, image in enumerate(images):
-            img_path = os.path.join(temp_dir, f"page_{i + 1}.png")
-            image.save(img_path, "PNG")
-            image_paths.append(img_path)
+        img_path = os.path.join(temp_dir, "page_1.png")
+        images[0].save(img_path, "PNG")
+        media_id = api.media_upload(filename=img_path).media_id
 
-        # Upload images
-        media_ids = [api.media_upload(filename=img).media_id for img in image_paths]
-
-        total_pages = len(media_ids)
-
-        # --- First Tweet with 🧵 and Page 1/N ---
-        caption = (
-            f"{period.capitalize()} Market Briefing 🧠🧵 "
-            f"{datetime.utcnow().strftime('%Y-%m-%d')}\n"
-            f"Page 1/{total_pages}\n"
-            f"#macro #markets #hedgefund"
-        )
-        resp = client.create_tweet(text=caption, media_ids=[media_ids[0]])
+        # Part 1: Caption + image
+        caption = get_briefing_caption(period, headline=headline, summary=summary)
+        resp = client.create_tweet(text=caption, media_ids=[media_id])
         tweet_id = resp.data["id"]
 
+        # --- Log main tweet ---
         url = f"https://x.com/{BOT_USER_ID}/status/{tweet_id}"
         date_str = datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
         log_tweet_to_csv(
@@ -268,23 +259,35 @@ def post_pdf_briefing(filepath: str, period: str = "morning"):
             theme=period,
             url=url
         )
-        logging.info(f"✅ Posted page 1 of {period} briefing: {url}")
+        logging.info(f"✅ Posted {period} briefing main tweet: {url}")
 
-        # --- Replies for remaining pages ---
-        for i in range(1, total_pages):
-            time.sleep(5)
-            footer = f"Page {i+1}/{total_pages}"
-            resp = client.create_tweet(
-                text=footer,
-                media_ids=[media_ids[i]],
-                in_reply_to_tweet_id=tweet_id
-            )
-            tweet_id = resp.data["id"]
-            logging.info(f"↪️ Posted page {i+1}: https://x.com/{BOT_USER_ID}/status/{tweet_id}")
+        # Part 2: Market sentiment summary (text-only)
+        sentiment = format_market_sentiment(
+            period,
+            equity_block=equity_block,
+            macro_block=macro_block,
+            crypto_block=crypto_block,
+            movers=mover_block
+        )
+
+        resp2 = client.create_tweet(
+            text=sentiment,
+            in_reply_to_tweet_id=tweet_id
+        )
+        reply_id = resp2.data["id"]
+        reply_url = f"https://x.com/{BOT_USER_ID}/status/{reply_id}"
+        log_tweet_to_csv(
+            tweet_id=reply_id,
+            timestamp=datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S'),
+            tweet_type="briefing_reply",
+            category="briefing",
+            theme=period,
+            url=reply_url
+        )
+        logging.info(f"↪️ Posted sentiment reply for {period}: {reply_url}")
 
         # Cleanup
-        for path in image_paths:
-            os.remove(path)
+        os.remove(img_path)
         os.rmdir(temp_dir)
 
     except Exception as e:

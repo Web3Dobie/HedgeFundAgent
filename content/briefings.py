@@ -19,15 +19,10 @@ import inspect
 BRIEFING_DIR = os.path.join(DATA_DIR, "briefings")
 os.makedirs(BRIEFING_DIR, exist_ok=True)
 
-def run_morning_briefing():
-    logging.info("Generating morning market briefing PDF")
-    pdf_path = generate_briefing_pdf("morning")  # generates the PDF
-    post_pdf_briefing(pdf_path, period="morning")  # posts it
-
-def run_pre_market_briefing():
-    logging.info("Generating pre_market briefing PDF")
-    pdf_path = generate_briefing_pdf("pre_market")
-    post_pdf_briefing(pdf_path, period="pre_market")
+def run_briefing(period: str):
+    logging.info(f"Generating {period} market briefing PDF")
+    pdf_path = generate_briefing_pdf(period)
+    post_pdf_briefing(pdf_path, period=period)
 
 def fetch_crypto_block() -> dict:
     """

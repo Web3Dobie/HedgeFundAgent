@@ -352,3 +352,149 @@ def is_relevant_headline(ticker: str, headline: str, company_name: str) -> bool:
     company_in_headline = re.search(company_pattern, headline_lower) is not None if company_pattern else False
 
     return ticker_in_headline or company_in_headline
+
+def get_briefing_caption(period: str, headline: str = None, summary: str = None) -> str:
+    date_str = datetime.utcnow().strftime('%Y-%m-%d')
+    if period == "morning":
+        return (
+            f"Morning Briefing: Overnight Up-Date 🌅\n"
+            f"{headline or ''}\n"
+            f"{date_str}\n"
+            f"#morning #markets #macro"
+        )
+    elif period == "pre_market":
+        return (
+            f"Pre-Market Moves: What’s Hot Before the Bell 🚦\n"
+            f"{headline or ''}\n"
+            f"{date_str}\n"
+            f"#premarket #stocks #trading"
+        )
+    elif period == "mid_day":
+        return (
+            f"Mid-Day Market Pulse 🕛\n"
+            f"{summary or ''}\n"
+            f"{date_str}\n"
+            f"#midday #marketupdate"
+        )
+    elif period == "after_market":
+        return (
+            f"After-Market Wrap: Winners, Losers & Surprises 🌙\n"
+            f"{headline or ''}\n"
+            f"{date_str}\n"
+            f"#afterhours #markets"
+        )
+    else:
+        return (
+            f"{period.capitalize()} Market Briefing 🧠\n"
+            f"{date_str}\n"
+            f"#markets"
+        )
+
+from datetime import datetime
+
+from datetime import datetime
+
+def format_market_sentiment(period, equity_block, macro_block, crypto_block, movers=None):
+    """
+    Builds the text-only market sentiment tweet for the specified period.
+    period: 'morning', 'pre_market', 'mid_day', or 'after_market'
+    """
+    lines = []
+    date_str = datetime.utcnow().strftime('%Y-%m-%d')
+
+    if period == "morning":
+        lines.append("Overnight movers & macro highlights:")
+        # Asian and European index moves
+        for idx in ["Nikkei 225", "Hang Seng", "Euro Stoxx 50", "DAX"]:
+            val = equity_block.get(idx)
+            if val:
+                lines.append(f"🔸 {idx}: {val}")
+        # FX and Crypto
+        usdjpy = macro_block.get("USD/JPY")
+        if usdjpy:
+            lines.append(f"USD/JPY: {usdjpy}")
+        btc = crypto_block.get("BTC")
+        if btc:
+            lines.append(f"$BTC: {btc}")
+        lines.append(f"#morning #macro #markets {date_str}")
+
+    elif period == "pre_market":
+        lines.append("Pre-market movers before the bell:")
+        if movers:
+            gainers = list(movers.get("top_gainers", {}).items())
+            losers = list(movers.get("top_losers", {}).items())
+            for symbol, val in gainers:
+                lines.append(f"🔺 ${symbol}: {val}")
+            for symbol, val in losers:
+                lines.append(f"🔻 ${symbol}: {val}")
+            if not gainers and not losers:
+                lines.append("No pre-market movers found.")
+        else:
+            lines.append("No pre-market movers found.")
+        # Add key futures or FX
+        spfut = equity_block.get("S&P Futures")
+        if spfut:
+            lines.append(f"S&P Futures: {spfut}")
+        lines.append(f"#premarket #stocks #trading {date_str}")
+
+    elif period == "mid_day":
+        lines.append("European close snapshot:")
+        for idx in ["Euro Stoxx 50", "DAX", "CAC 40", "FTSE 100"]:
+            val = equity_block.get(idx)
+            if val:
+                lines.append(f"🔸 {idx}: {val}")
+        eurusd = macro_block.get("EUR/USD")
+        if eurusd:
+            lines.append(f"EUR/USD: {eurusd}")
+        lines.append(f"#midday #europe #marketupdate {date_str}")
+
+    elif period == "after_market":
+        lines.append("After-hours movers & wrap-up:")
+        if movers:
+            gainers = list(movers.get("top_gainers", {}).items())
+            losers = list(movers.get("top_losers", {}).items())
+            for symbol, val in gainers:
+                lines.append(f"🔺 ${symbol}: {val}")
+            for symbol, val in losers:
+                lines.append(f"🔻 ${symbol}: {val}")
+            if not gainers and not losers:
+                lines.append("No after-hours movers found.")
+        else:
+            lines.append("No after-hours movers found.")
+        # Highlight big S&P move only
+        sp_fut = equity_block.get("S&P Futures")
+        sp500 = equity_block.get("S&P 500")
+        for sp_label, sp_val in [("S&P Futures", sp_fut), ("S&P 500", sp500)]:
+            if sp_val:
+                try:
+                    pct = float(sp_val.split("(")[-1].replace("%)", "").replace("+", ""))
+                    if abs(pct) >= 1.0:
+                        direction = "surged" if pct > 0 else "dropped"
+                        lines.append(f"⚡️ {sp_label} {direction} {pct:+.2f}% today.")
+                except Exception:
+                    pass
+                break
+        # FX/crypto as usual
+        usdjpy = macro_block.get("USD/JPY")
+        if usdjpy:
+            lines.append(f"USD/JPY: {usdjpy}")
+        btc = crypto_block.get("BTC")
+        if btc:
+            lines.append(f"$BTC: {btc}")
+        lines.append(f"#afterhours #markets {date_str}")
+
+    else:
+        # Fallback for unexpected types
+        lines.append("Market sentiment snapshot:")
+        sp = equity_block.get("S&P 500") or equity_block.get("S&P Futures")
+        btc = crypto_block.get("BTC")
+        usdjpy = macro_block.get("USD/JPY")
+        if sp:
+            lines.append(f"🔸 S&P 500: {sp}")
+        if btc:
+            lines.append(f"🔸 $BTC: {btc}")
+        if usdjpy:
+            lines.append(f"🔸 USD/JPY: {usdjpy}")
+        lines.append(f"#markets {date_str}")
+
+    return "\n".join(lines)
