@@ -142,7 +142,7 @@ def post_hedgefund_comment():
         tweet,
         flags=re.IGNORECASE
     ).strip()
-    tweet += f"\\n\\n{DISCLAIMER}"
+    tweet += f"\n\n{DISCLAIMER}"
 
     logger.info(f"Using theme: {theme}")
     logger.info(f"Using category: {category}")
