@@ -154,6 +154,71 @@ def timed_create_tweet(text: str, in_reply_to_tweet_id=None, part_index: int = N
         logging.error(f"HTTP POST /2/tweets failed after {elapsed:.2f}s (part {part_index}): {e}")
         raise
 
+# Timing wrapper for post_pdf_briefing
+
+def timed_post_pdf_briefing(filepath: str, period: str = "morning", headline=None, summary=None, 
+                            equity_block=None, macro_block=None, crypto_block=None, retry_count=0):
+    """
+    Retry-safe version of post_pdf_briefing with progressive backoff.
+    """
+    start = time.monotonic()
+    if has_reached_daily_limit():
+        logging.warning(f"🚫 Daily tweet limit reached — skipping {period} briefing.")
+        return
+
+    try:
+        images = convert_from_path(filepath, dpi=200, first_page=1, last_page=1)
+        if not images:
+            logging.error("❌ PDF conversion failed — no pages rendered.")
+            return
+
+        temp_dir = tempfile.mkdtemp()
+        img_path = os.path.join(temp_dir, "page_1.png")
+        images[0].save(img_path, "PNG")
+        media_id = api.media_upload(filename=img_path).media_id
+
+        caption = get_briefing_caption(period, headline=headline, summary=summary)
+        resp = client.create_tweet(text=caption, media_ids=[media_id])
+        tweet_id = resp.data["id"]
+
+        url = f"https://x.com/{BOT_USER_ID}/status/{tweet_id}"
+        date_str = datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
+        log_tweet_to_csv(tweet_id, date_str, "briefing", "briefing", period, url)
+        logging.info(f"✅ Posted {period} briefing main tweet: {url}")
+
+        sentiment = format_market_sentiment(
+            period,
+            equity_block=equity_block,
+            macro_block=macro_block,
+            crypto_block=crypto_block,
+            movers=None
+        )
+        resp2 = client.create_tweet(text=sentiment, in_reply_to_tweet_id=tweet_id)
+        reply_id = resp2.data["id"]
+        reply_url = f"https://x.com/{BOT_USER_ID}/status/{reply_id}"
+        log_tweet_to_csv(reply_id, datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S'),
+                         "briefing_reply", "briefing", period, reply_url)
+        logging.info(f"↪️ Posted sentiment reply for {period}: {reply_url}")
+
+        os.remove(img_path)
+        os.rmdir(temp_dir)
+
+    except (tweepy.errors.TweepyException, requests.exceptions.RequestException, ConnectionError) as e:
+        elapsed = time.monotonic() - start
+        error_str = str(e).lower()
+        if ("timeout" in error_str or "connection" in error_str or "remote end closed" in error_str) and retry_count < MAX_RETRY_ATTEMPTS:
+            delay = RETRY_DELAYS[retry_count]
+            logging.warning(f"⚠️ PDF post attempt {retry_count+1} failed: {e}. Retrying in {delay}s.")
+            time.sleep(delay)
+            return timed_post_pdf_briefing(filepath, period, headline, summary, equity_block, macro_block, crypto_block, retry_count + 1)
+
+        logging.error(f"❌ PDF post failed after {elapsed:.2f}s: {e}")
+        raise
+
+    except Exception as e:
+        logging.error(f"❌ Failed to post {period} briefing: {e}")
+        raise
+
 # --- Log tweet to CSV file
 TWEET_LOG_FILE = os.path.join(LOG_DIR, "tweet_log.csv")
 
@@ -227,72 +292,19 @@ def post_tweet(text: str, category: str, theme: str):
 
 # ─── PDF Tweet as PNG ────────────────────────────────────────────────────────
 def post_pdf_briefing(filepath: str, period: str = "morning", headline=None, summary=None, 
-                     equity_block=None, macro_block=None, crypto_block=None):
-    mover_block = None  # Always initialize
-    if has_reached_daily_limit():
-        logging.warning(f"🚫 Daily tweet limit reached — skipping {period} briefing.")
-        return
-
-    try:
-        images = convert_from_path(filepath, dpi=200, first_page=1, last_page=1)
-        if not images:
-            logging.error("❌ PDF conversion failed — no pages rendered.")
-            return
-
-        temp_dir = tempfile.mkdtemp()
-        img_path = os.path.join(temp_dir, "page_1.png")
-        images[0].save(img_path, "PNG")
-        media_id = api.media_upload(filename=img_path).media_id
-
-        # Part 1: Caption + image
-        caption = get_briefing_caption(period, headline=headline, summary=summary)
-        resp = client.create_tweet(text=caption, media_ids=[media_id])
-        tweet_id = resp.data["id"]
-
-        # --- Log main tweet ---
-        url = f"https://x.com/{BOT_USER_ID}/status/{tweet_id}"
-        date_str = datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
-        log_tweet_to_csv(
-            tweet_id=tweet_id,
-            timestamp=date_str,
-            tweet_type="briefing",
-            category="briefing",
-            theme=period,
-            url=url
-        )
-        logging.info(f"✅ Posted {period} briefing main tweet: {url}")
-
-        # Part 2: Market sentiment summary (text-only)
-        sentiment = format_market_sentiment(
-            period,
-            equity_block=equity_block,
-            macro_block=macro_block,
-            crypto_block=crypto_block,
-            movers=mover_block
-        )
-
-        resp2 = client.create_tweet(
-            text=sentiment,
-            in_reply_to_tweet_id=tweet_id
-        )
-        reply_id = resp2.data["id"]
-        reply_url = f"https://x.com/{BOT_USER_ID}/status/{reply_id}"
-        log_tweet_to_csv(
-            tweet_id=reply_id,
-            timestamp=datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S'),
-            tweet_type="briefing_reply",
-            category="briefing",
-            theme=period,
-            url=reply_url
-        )
-        logging.info(f"↪️ Posted sentiment reply for {period}: {reply_url}")
-
-        # Cleanup
-        os.remove(img_path)
-        os.rmdir(temp_dir)
-
-    except Exception as e:
-        logging.error(f"❌ Failed to post {period} briefing thread: {e}")
+                      equity_block=None, macro_block=None, crypto_block=None):
+    """
+    Wrapper for backward compatibility — uses retry-safe PDF posting logic.
+    """
+    timed_post_pdf_briefing(
+        filepath=filepath,
+        period=period,
+        headline=headline,
+        summary=summary,
+        equity_block=equity_block,
+        macro_block=macro_block,
+        crypto_block=crypto_block
+    )
 
 # ─── Quote Tweet ────────────────────────────────────────────────────────
 def post_quote_tweet(text: str, tweet_url: str, category: str, theme: str):

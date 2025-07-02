@@ -22,9 +22,13 @@ from data.ticker_blocks import (
 )
 from utils.fetch_token_data import get_top_tokens_data
 from utils.gpt import generate_gpt_text
-from utils.x_post import post_pdf_briefing
+from utils.x_post import timed_post_pdf_briefing
 from utils.fetch_stock_data import get_top_movers_from_constituents, fetch_stock_news
-
+from utils.fetch_calendars import (
+    get_econ_calendar_tradingview,
+    get_ipo_calendar,
+    get_earnings_calendar,
+)
 
 
 import logging
@@ -36,7 +40,7 @@ os.makedirs(BRIEFING_DIR, exist_ok=True)
 def run_briefing(period: str):
     logging.info(f"Generating {period} market briefing PDF")
     pdf_path = generate_briefing_pdf(period)
-    post_pdf_briefing(pdf_path, period=period)
+    timed_post_pdf_briefing(pdf_path, period=period)
 
 def fetch_crypto_block() -> dict:
     """
@@ -88,6 +92,11 @@ def generate_briefing_pdf(briefing_type: str = "morning") -> str:
     """
 
     limit = 5  # Number of top movers to show
+    
+    # Fetch calendar data
+    econ_df = get_econ_calendar_tradingview(countries=["US"], days=1)
+    ipo_list = get_ipo_calendar()
+    earnings_list = get_earnings_calendar()
 
     # ─── Build Market Data Blocks (implement as you already do) ───────────────
     equity_block, macro_block, crypto_block = get_market_blocks(briefing_type)
@@ -136,6 +145,10 @@ def generate_briefing_pdf(briefing_type: str = "morning") -> str:
                 "top_gainers": {symbol: f"{price:.2f} ({change:+.2f}%)" for symbol, price, change in pre_gainers[:limit]},
                 "top_losers": {symbol: f"{price:.2f} ({change:+.2f}%)" for symbol, price, change in pre_losers[:limit]}
             }
+
+            # print("DEBUG pre_market:", pre_market[:5])
+            # print("DEBUG pre_losers:", pre_losers)
+
         elif briefing_type == "after_market":
             post_market = movers.get("post_market", [])
             post_gainers = [x for x in post_market if x[2] > 0]
@@ -173,7 +186,10 @@ def generate_briefing_pdf(briefing_type: str = "morning") -> str:
         period=briefing_type,
         mover_block=mover_block if briefing_type != "morning" else None,
         mover_title=mover_title if briefing_type != "morning" else None,
-        mover_news=mover_news if briefing_type in {"pre_market", "after_market"} else None
+        mover_news=mover_news if briefing_type in {"pre_market", "after_market"} else None,
+        econ_df=econ_df,
+        ipo_list=ipo_list,
+        earnings_list=earnings_list
     )
 
     return pdf_path
