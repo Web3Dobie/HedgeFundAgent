@@ -1,11 +1,68 @@
 import os
+import pandas as pd
 from datetime import datetime
 from fpdf import FPDF
 from utils.config import DATA_DIR
 from utils.gpt import generate_gpt_text
+from utils.fetch_calendars import (
+    get_econ_calendar_tradingview,
+    get_ipo_calendar,
+    get_earnings_calendar,
+)
 
 BRIEFING_DIR = os.path.join(DATA_DIR, "briefings")
 os.makedirs(BRIEFING_DIR, exist_ok=True)
+
+def render_calendar_page(econ_df, ipo_list, earnings_list, pdf):
+    pdf.set_font("DejaVu", "B", 14)
+    pdf.cell(0, 10, "🗓️ Calendar Events – Economic, IPO, Earnings", ln=True, align="C")
+    pdf.ln(8)
+
+    # ─── Economic Calendar ───────────────────────────────
+    pdf.set_font("DejaVu", "B", 12)
+    pdf.cell(0, 8, "Economic Calendar", ln=True)
+    pdf.set_font("DejaVu", size=11)
+    if econ_df is not None and not econ_df.empty:
+        for _, row in econ_df.iterrows():
+            title = row['title'][:40]
+            time = pd.to_datetime(row['date']).strftime('%H:%M')
+            forecast = row.get('forecast') or '-'
+            previous = row.get('previous') or '-'
+            pdf.cell(0, 7, f"- {title}: {time} | F: {forecast} | P: {previous}", ln=True)
+    else:
+        pdf.cell(0, 7, "No events today.", ln=True)
+
+    pdf.ln(5)
+
+    # ─── IPO Calendar ───────────────────────────────
+    pdf.set_font("DejaVu", "B", 12)
+    pdf.cell(0, 8, "Upcoming IPOs", ln=True)
+    pdf.set_font("DejaVu", size=11)
+    if ipo_list:
+        for ipo in ipo_list:
+            symbol = ipo.get('symbol')
+            name = ipo.get('name', '')[:30]
+            price = ipo.get('price', '-')
+            date = ipo.get('date', '-')
+            pdf.cell(0, 7, f"- {symbol}: {name} @ ${price} ({date})", ln=True)
+    else:
+        pdf.cell(0, 7, "No IPOs in next 14 days.", ln=True)
+
+    pdf.ln(5)
+
+    # ─── Earnings Calendar ───────────────────────────────
+    pdf.set_font("DejaVu", "B", 12)
+    pdf.cell(0, 8, "Earnings Announcements", ln=True)
+    pdf.set_font("DejaVu", size=11)
+    if earnings_list:
+        for e in earnings_list:
+            symbol = e.get('symbol')
+            eps = e.get('epsEstimate', '-')
+            rev = e.get('revenueEstimate')
+            rev_display = f"${int(rev):,}" if isinstance(rev, (int, float)) else "-"
+            pdf.cell(0, 7, f"- {symbol}: EPS: {eps}, Rev: {rev_display}", ln=True)
+    else:
+        pdf.cell(0, 7, "No earnings today.", ln=True)
 
 def render_pdf(
     headlines,
@@ -16,7 +73,10 @@ def render_pdf(
     period,
     mover_block=None,
     mover_title=None,
-    mover_news=None
+    mover_news=None,
+    econ_df=None,
+    ipo_list=None,
+    earnings_list=None
 ) -> str:
     now = datetime.utcnow()
     date_str = now.strftime("%Y-%m-%d")
@@ -38,11 +98,26 @@ def render_pdf(
     # For pre_market and after_market, pass movers block, no macro
     elif period in {"pre_market", "after_market"}:
         render_block(equity_block, None, crypto_block, mover_block, comment, pdf)
+
+    # print("DEBUG CAL: econ_df", type(econ_df), len(econ_df) if econ_df is not None else "None")
+    # print("DEBUG CAL: ipo_list", type(ipo_list), len(ipo_list) if ipo_list else "None")
+    # print("DEBUG CAL: earnings_list", type(earnings_list), len(earnings_list) if earnings_list else "None")
+
+    # Page 2: Calendar Events (econ, IPO, earnings) — always included
+    if (econ_df is not None and not econ_df.empty) or ipo_list or earnings_list:
+        pdf.add_page()
+        render_calendar_page(
+            econ_df if econ_df is not None else pd.DataFrame(),
+            ipo_list if ipo_list is not None else [],
+            earnings_list if earnings_list is not None else [],
+            pdf
+        )
+
     
-    # Page 2: Headlines (show for all briefing types if headlines exist)
+    # Page 3: Headlines (show for all briefing types if headlines exist)
     if headlines:
         render_headlines_pages(pdf, headlines, date_str)
-    # Page 3: News behind movers (optional)
+    # Page 4: News behind movers (optional)
     # if mover_news:
     #    render_mover_news(pdf, mover_news)
 
@@ -59,7 +134,12 @@ def render_mover_block(pdf, mover_block: dict, title: str):
 
     def render_section(heading: str, entries: dict, color: str):
         if not entries:
+            pdf.set_font("DejaVu", size=11)
+            pdf.set_text_color(100)  # Gray color for placeholder text
+            pdf.cell(0, 7, "No data available.", ln=True)
+            pdf.ln(3)
             return
+
 
         # Section header
         pdf.set_font("DejaVu", "B", 12)
