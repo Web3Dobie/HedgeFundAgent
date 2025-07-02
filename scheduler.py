@@ -35,7 +35,7 @@ for hour in range(9, 21, 3):  # 9am, 12am, 3pm, 6pm, 9pm
 
 # --- Weekday Briefings ---
 for day in ["monday", "tuesday", "wednesday", "thursday", "friday"]:
-    getattr(schedule.every(), day).at("06:00").do(partial(run_briefing, "morning"))
+    getattr(schedule.every(), day).at("06:45").do(partial(run_briefing, "morning"))
     getattr(schedule.every(), day).at("13:10").do(partial(run_briefing, "pre_market"))
     getattr(schedule.every(), day).at("16:00").do(partial(run_briefing, "mid_day"))
     getattr(schedule.every(), day).at("21:40").do(partial(run_briefing, "after_market"))
