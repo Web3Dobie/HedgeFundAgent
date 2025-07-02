@@ -498,3 +498,24 @@ def format_market_sentiment(period, equity_block, macro_block, crypto_block, mov
         lines.append(f"#markets {date_str}")
 
     return "\n".join(lines)
+
+def treasury_futures_to_yield_change(label, value):
+    """
+    Estimate the change in yield (%) from the change in the futures price.
+    Returns a string like: "-0.01%" for a small move lower in yield.
+    """
+    match = re.search(r"\(([-+]\d+\.\d+)%\)", value)
+    if not match:
+        return None  # No change info
+
+    pct_change = float(match.group(1))
+    # Rule of thumb: +1% in price ≈ X% drop in yield (negative correlation)
+    if "2Y" in label:
+        multiplier = -0.40  # +1% in price = -0.40% in yield (40bps)
+    elif "10Y" in label:
+        multiplier = -0.17  # +1% in price = -0.17% in yield (17bps)
+    else:
+        multiplier = -0.20  # Default fallback
+
+    yield_change = pct_change * multiplier
+    return f"{yield_change:+.2f}%"

@@ -1,11 +1,25 @@
 import os
 import csv
 from datetime import datetime, timedelta
-from utils.text_utils import TICKER_INFO, is_weekend, get_headlines_for_tickers, flatten_and_deduplicate_headlines, is_relevant_headline
+from utils.text_utils import (
+    TICKER_INFO, 
+    is_weekend, 
+    get_headlines_for_tickers, 
+    flatten_and_deduplicate_headlines, 
+    is_relevant_headline, 
+    treasury_futures_to_yield_change
+)
 from utils.config import DATA_DIR
 from utils.fetch_stock_data import fetch_last_price_yf
 from utils.pdf_renderer import render_pdf
-from data.ticker_blocks import ASIA_EQUITY, EUROPE_EQUITY, US_EQUITY, FX_PAIRS, COMMODITIES, RATES 
+from data.ticker_blocks import (
+    ASIA_EQUITY, 
+    EUROPE_EQUITY, 
+    US_EQUITY, 
+    FX_PAIRS, 
+    COMMODITIES, 
+    RATES 
+)
 from utils.fetch_token_data import get_top_tokens_data
 from utils.gpt import generate_gpt_text
 from utils.x_post import post_pdf_briefing
@@ -81,8 +95,24 @@ def generate_briefing_pdf(briefing_type: str = "morning") -> str:
     print("Morning briefing macro block keys:", macro_block.keys())
     print("Morning briefing macro block sample data:", list(macro_block.items())[:5])
 
+    # --- BEGIN YIELD CONVERSION BLOCK ---
+    macro_yield_lines = []
+    for label, value in macro_block.items():
+        if "US Treasury" in label:
+            yield_delta = treasury_futures_to_yield_change(label, value)
+            if yield_delta:
+                macro_yield_lines.append(f"{label.replace('US Treasury','yield')}: {yield_delta}")
+
     # ─── GPT Comment Block ────────────────────────────────────────────────────
-    comment_prompt = f"Provide a sharp 2-sentence hedge fund commentary for the {briefing_type} macro environment."
+    macro_summary = ", ".join(
+        f"{k}: {v}" for k, v in macro_block.items() if v != "N/A" and "US Treasury" not in k
+    )
+    if macro_yield_lines:
+        macro_summary = macro_summary + ", " + ", ".join(macro_yield_lines)
+    comment_prompt = (
+        f"In 2-3 sentences, provide a hedge fund style summary of the {briefing_type} market sentiment "
+        f"based on: {macro_summary}"
+    )
     comment = generate_gpt_text(comment_prompt, max_tokens=150).strip()
 
     # ─── Headlines for Page 2 ────────────────────────────────────────────────
