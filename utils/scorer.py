@@ -101,16 +101,23 @@ def score_headlines(items: list[dict]) -> list[dict]:
         threshold = CATEGORY_THRESHOLDS.get(category, 8)
 
         if item["score"] >= threshold:
+            blocked_domains = ["bloomberg.com", "wsj.com", "seekingalpha.com", "barrons.com", "finance.yahoo.com"]
+
             if item.get("url") and not item.get("summary"):
-                try:
-                    item["summary"] = summarize_url(item["url"])
-                except Exception as e:
-                    logging.warning(f"Summary fetch failed for {item['url']}: {e}")
+                if any(domain in item["url"] for domain in blocked_domains):
+                    logging.info(f"[SUMMARY SKIP] Skipping summary for blocked domain: {item['url']}")
                     item["summary"] = ""
+                else:
+                    try:
+                        item["summary"] = summarize_url(item["url"])
+                    except Exception as e:
+                        logging.warning(f"[SUMMARY ERROR] Failed to summarize {item['url']}: {e}")
+                        item["summary"] = ""
             else:
                 item.setdefault("summary", "")
 
             _append_to_category_csv(item)
+            _append_to_legacy_csv(item)
             results.append(item)
 
     return results
@@ -137,10 +144,32 @@ def _append_to_category_csv(record: dict):
             writer = csv.DictWriter(f, fieldnames=header)
             if write_header:
                 writer.writeheader()
-            writer.writerow(record)
+            filtered_record = {k: v for k, v in record.items() if k in header}
+            writer.writerow(filtered_record)
+
     except Exception as e:
         logging.error(f"Write failed for {filepath}: {e}")
         raise
+
+def _append_to_legacy_csv(record: dict):
+    filepath = os.path.join(DATA_DIR, "scored_headlines.csv")
+    header = ["score", "headline", "url", "ticker", "summary", "timestamp", "used_in_hourly_commentary"]
+    write_header = not os.path.exists(filepath)
+
+    record.setdefault("used_in_hourly_commentary", "False")
+    record.setdefault("summary", "")
+
+    try:
+        with open(filepath, "a", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=header)
+            if write_header:
+                writer.writeheader()
+            filtered_record = {k: v for k, v in record.items() if k in header}
+            writer.writerow(filtered_record)
+    except Exception as e:
+        logging.error(f"Write failed for legacy CSV: {e}")
+        raise
+
 
 def write_headlines(records: list[dict]):
     for rec in records:

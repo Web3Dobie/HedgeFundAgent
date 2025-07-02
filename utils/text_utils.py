@@ -9,6 +9,8 @@ import re
 import requests
 import spacy
 import csv
+import os
+import pandas as pd
 from functools import lru_cache
 from datetime import datetime
 import logging
@@ -19,6 +21,10 @@ _NLP = spacy.load("en_core_web_sm")
 
 # Define logger
 logger = logging.getLogger(__name__)
+
+
+DATA_DIR = os.path.join(os.path.dirname(__file__), "..", "data")
+EXCEL_PATH = os.path.join(DATA_DIR, "index_constituents.xlsx")
 
 ### --- 1. Classify Headline Topic --- ###
 
@@ -225,7 +231,7 @@ def enhance_prompt_with_prices(prompt: str, prices: dict) -> str:
     return f"{prompt}\n\n{price_info}"
 
 ### --- 6. Enrich Cashtags with Price Data --- ###
-import re
+
 
 def enrich_cashtags_with_price(text: str, prices: dict) -> str:
     """
@@ -272,3 +278,77 @@ def fetch_scored_headlines(category: str) -> list[dict]:
 
     with open(path, newline="", encoding="utf-8") as f:
         return list(csv.DictReader(f))
+
+def flatten_and_deduplicate_headlines(mover_news):
+    seen_headlines = set()
+    unique_headlines = []
+    for ticker, articles in mover_news.items():
+        for article in articles:
+            headline = article.get("headline", "").strip().lower()
+            url = article.get("url", "")
+            if not headline or not url:
+                continue
+            if headline in seen_headlines:
+                continue
+            unique_headlines.append((0, f"{article['headline']} ({ticker})", url))
+            seen_headlines.add(headline)
+    return unique_headlines
+
+def load_ticker_info():
+    xls = pd.ExcelFile(EXCEL_PATH)
+    sp100_df = pd.read_excel(xls, "SP100")
+    nasdaq100_df = pd.read_excel(xls, "Nasdaq100")
+
+    def df_to_dict(df):
+        d = {}
+        for _, row in df.iterrows():
+            ticker = row['Ticker'].strip().upper()
+            d[ticker] = {
+                "name": row['Company_Name'].strip(),
+                "sector": row.get('GICS_Sector', '').strip() if 'Sector' in row else None
+            }
+        return d
+
+    sp100_dict = df_to_dict(sp100_df)
+    nasdaq100_dict = df_to_dict(nasdaq100_df)
+
+    combined = {**sp100_dict, **nasdaq100_dict}
+    return combined
+
+TICKER_INFO = load_ticker_info()
+
+import re
+
+def is_relevant_headline(ticker: str, headline: str, company_name: str) -> bool:
+    if not headline:
+        return False
+
+    ticker = ticker.lower()
+    headline_lower = headline.lower()
+    company_name_lower = company_name.lower() if company_name else ""
+
+    # Pattern to match ticker with word boundaries relaxed
+    ticker_pattern = r'(?<!\w)' + re.escape(ticker) + r'(?!\w)'
+
+    # Check for cashtag e.g. $tsla
+    cashtag = f"${ticker}"
+
+    # Basic company name cleanup to main part, remove suffixes
+    def clean_company_name(name):
+        suffixes = ["inc", "inc.", "ltd", "ltd.", "corp", "corporation", "co", "co."]
+        for suf in suffixes:
+            if name.endswith(suf):
+                name = name[: -len(suf)].strip()
+        return name
+
+    company_name_clean = clean_company_name(company_name_lower)
+
+    company_pattern = r'\b' + re.escape(company_name_clean) + r'\b' if company_name_clean else None
+
+    # Check ticker presence
+    ticker_in_headline = re.search(ticker_pattern, headline_lower) is not None or cashtag in headline_lower
+
+    # Check company name presence (optional)
+    company_in_headline = re.search(company_pattern, headline_lower) is not None if company_pattern else False
+
+    return ticker_in_headline or company_in_headline
