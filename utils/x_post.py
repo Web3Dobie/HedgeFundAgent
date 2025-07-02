@@ -228,6 +228,7 @@ def post_tweet(text: str, category: str, theme: str):
 # ─── PDF Tweet as PNG ────────────────────────────────────────────────────────
 def post_pdf_briefing(filepath: str, period: str = "morning", headline=None, summary=None, 
                      equity_block=None, macro_block=None, crypto_block=None):
+    mover_block = None  # Always initialize
     if has_reached_daily_limit():
         logging.warning(f"🚫 Daily tweet limit reached — skipping {period} briefing.")
         return
