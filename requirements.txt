@@ -9,3 +9,5 @@ tweepy
 python-dotenv
 feedparser
 spacy
+finnhub-python
+openpypl
