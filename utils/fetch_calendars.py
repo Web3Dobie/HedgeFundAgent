@@ -2,6 +2,7 @@ import requests
 from datetime import datetime, timedelta
 import finnhub
 import os
+from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 import pandas as pd
 from utils.config import FINNHUB_API_KEY
@@ -10,27 +11,6 @@ load_dotenv()
 
 finnhub_client = finnhub.Client(api_key=FINNHUB_API_KEY)
 
-def get_econ_calendar_tradingview(countries=None, days=1):
-    """
-    Fetch economic calendar data from TradingView internal API (no key required).
-    Returns a DataFrame of upcoming economic events.
-    """
-    url = "https://economic-calendar.tradingview.com/events"
-    today = pd.Timestamp.today().normalize()
-    payload = {
-        "from": (today + pd.Timedelta(hours=23)).isoformat() + ".000Z",
-        "to": (today + pd.Timedelta(days=days) + pd.Timedelta(hours=22)).isoformat() + ".000Z",
-    }
-    if countries:
-        payload["countries"] = ",".join(countries)
-    headers = {"Origin": "https://in.tradingview.com"}
-    try:
-        resp = requests.get(url, headers=headers, params=payload)
-        resp.raise_for_status()
-        return pd.DataFrame(resp.json().get("result", []))
-    except Exception as e:
-        print(f"Error fetching TradingView econ calendar: {e}")
-        return pd.DataFrame()
 
 def get_ipo_calendar(start_date: str = None, end_date: str = None) -> list:
     """
@@ -63,3 +43,44 @@ def get_earnings_calendar(start_date: str = None, end_date: str = None) -> list:
     except Exception as e:
         print(f"Error fetching earnings calendar: {e}")
         return []
+
+def scrape_investing_econ_calendar():
+    url = "https://www.investing.com/economic-calendar/"
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+    }
+
+    response = requests.get(url, headers=headers)
+    response.raise_for_status()
+
+    soup = BeautifulSoup(response.text, "html.parser")
+
+    table = soup.find("table", {"id": "economicCalendarData"})
+    rows = table.find_all("tr", {"class": ["js-event-item", "js-first-row"]})
+
+    today_str = pd.Timestamp.utcnow().strftime('%Y-%m-%d')
+       
+    data = []
+    for row in rows:
+        cols = row.find_all("td")
+        if len(cols) < 7:
+            continue
+
+        event = {
+            "date": today_str,
+            "time": cols[0].get_text(strip=True),
+            "currency": cols[1].get_text(strip=True),
+            "event": cols[3].get_text(strip=True),
+            "actual": cols[4].get_text(strip=True),
+            "forecast": cols[5].get_text(strip=True),
+            "previous": cols[6].get_text(strip=True),
+        }
+        data.append(event)
+
+    df = pd.DataFrame(data)
+    return df
+
+
+if __name__ == "__main__":
+    df = scrape_investing_econ_calendar()
+    print(df.head())

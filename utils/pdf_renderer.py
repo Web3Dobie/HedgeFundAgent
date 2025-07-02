@@ -1,11 +1,12 @@
 import os
+import math
 import pandas as pd
 from datetime import datetime
 from fpdf import FPDF
 from utils.config import DATA_DIR
 from utils.gpt import generate_gpt_text
 from utils.fetch_calendars import (
-    get_econ_calendar_tradingview,
+    scrape_investing_econ_calendar,
     get_ipo_calendar,
     get_earnings_calendar,
 )
@@ -13,26 +14,50 @@ from utils.fetch_calendars import (
 BRIEFING_DIR = os.path.join(DATA_DIR, "briefings")
 os.makedirs(BRIEFING_DIR, exist_ok=True)
 
+def safe_value(val):
+    if val is None:
+        return "-"
+    if isinstance(val, float) and math.isnan(val):
+        return "-"
+    if isinstance(val, str) and val.lower() == "nan":
+        return "-"
+    return str(val)
+
+def render_economic_calendar_table(pdf, econ_df):
+    pdf.set_font("DejaVu", "B", 12)
+    pdf.cell(0, 10, "Economic Calendar", ln=True)
+
+    col_widths = [80, 20, 25, 25, 25, 25]  # Adjust columns for new data
+    headers = ["Event", "Currency", "Time", "Actual", "Forecast", "Previous"]
+
+    pdf.set_font("DejaVu", "B", 11)
+    for i, header in enumerate(headers):
+        pdf.cell(col_widths[i], 8, header, border=1, align="C")
+    pdf.ln()
+
+    pdf.set_font("DejaVu", "", 10)
+    for _, row in econ_df.iterrows():
+        event = row.get("event", "-")[:45]
+        currency = row.get("currency", "-")
+        time = row.get("time", "-")
+        actual = row.get("actual", "-")
+        forecast = row.get("forecast", "-")
+        previous = row.get("previous", "-")
+
+        row_items = [event, currency, time, actual, forecast, previous]
+        for i, item in enumerate(row_items):
+            pdf.cell(col_widths[i], 7, item, border=1)
+        pdf.ln()
+
+    pdf.ln(8)
+
 def render_calendar_page(econ_df, ipo_list, earnings_list, pdf):
     pdf.set_font("DejaVu", "B", 14)
     pdf.cell(0, 10, "🗓️ Calendar Events – Economic, IPO, Earnings", ln=True, align="C")
     pdf.ln(8)
 
     # ─── Economic Calendar ───────────────────────────────
-    pdf.set_font("DejaVu", "B", 12)
-    pdf.cell(0, 8, "Economic Calendar", ln=True)
-    pdf.set_font("DejaVu", size=11)
-    if econ_df is not None and not econ_df.empty:
-        for _, row in econ_df.iterrows():
-            title = row['title'][:40]
-            time = pd.to_datetime(row['date']).strftime('%H:%M')
-            forecast = row.get('forecast') or '-'
-            previous = row.get('previous') or '-'
-            pdf.cell(0, 7, f"- {title}: {time} | F: {forecast} | P: {previous}", ln=True)
-    else:
-        pdf.cell(0, 7, "No events today.", ln=True)
-
-    pdf.ln(5)
+    render_economic_calendar_table(pdf, econ_df)
 
     # ─── IPO Calendar ───────────────────────────────
     pdf.set_font("DejaVu", "B", 12)
