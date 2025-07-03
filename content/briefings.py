@@ -1,6 +1,9 @@
 import os
 import csv
 import finnhub
+import logging
+import inspect
+
 from datetime import datetime, timedelta
 from utils.text_utils import (
     TICKER_INFO, 
@@ -29,6 +32,7 @@ from data.ticker_blocks import (
     FX_PAIRS, 
     COMMODITIES, 
     RATES,
+    CRYPTO,
     YIELD_SYMBOLS 
 )
 from utils.fetch_token_data import get_top_tokens_data
@@ -40,8 +44,10 @@ from utils.fetch_calendars import (
     get_ipo_calendar,
     get_earnings_calendar,
 )
-import logging
-import inspect
+
+from utils.azure_blob_storage_handler import upload_pdf_to_blob
+from utils.notion_helper import log_pdf_briefing_to_notion
+
 
 BRIEFING_DIR = os.path.join(DATA_DIR, "briefings")
 os.makedirs(BRIEFING_DIR, exist_ok=True)
@@ -51,17 +57,30 @@ finnhub_client = finnhub.Client(api_key=api_key)
 
 def run_briefing(period: str):
     logging.info(f"Generating {period} market briefing PDF")
+
+    #Step 1: Generate the PDF briefing
     pdf_path = generate_briefing_pdf(period)
     
-    # You'll want to get the market blocks again or modify generate_briefing_pdf to return them
+    #Step 2: Upload to Azure Blob Storage
+    blob_name = os.path.basename(pdf_path)  # e.g., "briefing_2025-07-03.pdf"
+    pdf_url = upload_pdf_to_blob(pdf_path, blob_name)
+    logging.info(f"Uploaded PDF to Azure Blob Storage: {pdf_url}")
+
+    # Step 3: Log PDF metadata + URL to Notion
+    notion_page = log_pdf_briefing_to_notion(pdf_path, period, pdf_url)
+    logging.info(f"Logged PDF briefing to Notion: {notion_page.get('id')}")
+
+    # Step 4: Fetch market data blocks for sentiment tweet
     equity_block, macro_block, crypto_block = get_market_blocks(period)
-    
+
+    # Step 5: Post PDF briefing to X (Twitter)
     timed_post_pdf_briefing(
         pdf_path,
         period=period,
         equity_block=equity_block,
         macro_block=macro_block,
-        crypto_block=crypto_block
+        crypto_block=crypto_block,
+        pdf_url=pdf_url   # pass this if you want to use it in tweet captions
     )
 
 def fetch_crypto_block() -> dict:

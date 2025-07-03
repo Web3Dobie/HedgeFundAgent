@@ -69,3 +69,11 @@ RSS_FEED_URLS = {
     "yahoo_finance": "https://finance.yahoo.com/news/rssindex",
     "marketwatch": "https://www.marketwatch.com/rss/topstories",
 }
+
+#Notion API
+NOTION_API_KEY = os.getenv("NOTION_API_KEY")
+NOTION_PDF_DATABASE_ID = os.getenv("NOTION_PDF_DATABASE_ID")
+
+#Azure Blob Storage
+AZURE_STORAGE_CONNECTION_STRING = os.getenv("AZURE_STORAGE_CONNECTION_STRING")
+CONTAINER_NAME = os.getenv("AZURE_BRIEFINGS_CONTAINER_NAME")

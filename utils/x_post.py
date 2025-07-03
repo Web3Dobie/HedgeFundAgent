@@ -154,11 +154,41 @@ def timed_create_tweet(text: str, in_reply_to_tweet_id=None, part_index: int = N
         logging.error(f"HTTP POST /2/tweets failed after {elapsed:.2f}s (part {part_index}): {e}")
         raise
 
-# Timing wrapper for post_pdf_briefing
+# ─── Timed PDF Briefing Post ─────────────────────────────────────────────
+# This function posts a PDF briefing as a multi-part thread on X (Twitter).
+def timed_post_pdf_briefing(
+    filepath: str,
+    period: str = "morning",
+    headline=None,
+    summary=None,
+    equity_block=None,
+    macro_block=None,
+    crypto_block=None,
+    pdf_url=None,
+    retry_count=0
+):
+    """
+    Posts a multi-part briefing thread on X (Twitter) including:
+    - Main briefing tweet with PDF first page image
+    - Sentiment reply tweet
+    - Third tweet with PDF link and call to action
 
-def timed_post_pdf_briefing(filepath: str, period: str = "morning", headline=None, summary=None, 
-                            equity_block=None, macro_block=None, crypto_block=None, retry_count=0):
-    start = time.monotonic()
+    Handles retries on main tweet failures and logs tweet IDs and URLs.
+
+    Args:
+        filepath (str): Local PDF file path.
+        period (str): Briefing period (e.g., 'morning', 'pre_market').
+        headline (str, optional): Headline for main tweet.
+        summary (str, optional): Summary text for main tweet.
+        equity_block (dict, optional): Equity prices for sentiment.
+        macro_block (dict, optional): Macro prices for sentiment.
+        crypto_block (dict, optional): Crypto prices for sentiment.
+        pdf_url (str, optional): Public URL to the full PDF briefing.
+        retry_count (int): Retry attempt count for main tweet.
+    """
+    img_path = None
+    temp_dir = None
+
     if has_reached_daily_limit():
         logging.warning(f"🚫 Daily tweet limit reached — skipping {period} briefing.")
         return
@@ -216,6 +246,7 @@ def timed_post_pdf_briefing(filepath: str, period: str = "morning", headline=Non
                     equity_block=equity_block,
                     macro_block=macro_block,
                     crypto_block=crypto_block,
+                    pdf_url=pdf_url,
                     retry_count=retry_count + 1
                 )
             raise
@@ -227,27 +258,67 @@ def timed_post_pdf_briefing(filepath: str, period: str = "morning", headline=Non
         logging.info(f"✅ Posted {period} briefing main tweet: {url}")
 
         # Post reply with sentiment
-        # Post reply with sentiment
-        resp2 = client.create_tweet(text=sentiment, in_reply_to_tweet_id=tweet_id)
-        reply_id = getattr(resp2.data, "id", None) if resp2 and resp2.data else None
-        if reply_id:
-            reply_url = f"https://x.com/{BOT_USER_ID}/status/{reply_id}"
-            log_tweet_to_csv(reply_id, datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S'),
-                            "briefing_reply", "briefing", period, reply_url)
-            logging.info(f"↪️ Posted sentiment reply for {period}: {reply_url}")
+        try:
+            resp2 = client.create_tweet(text=sentiment, in_reply_to_tweet_id=tweet_id)
+            reply_id = getattr(resp2.data, "id", None) if resp2 and resp2.data else None
+            if reply_id:
+                reply_url = f"https://x.com/{BOT_USER_ID}/status/{reply_id}"
+                log_tweet_to_csv(reply_id, datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S'),
+                                 "briefing_reply", "briefing", period, reply_url)
+                logging.info(f"↪️ Posted sentiment reply for {period}: {reply_url}")
+            else:
+                logging.error("Failed to post sentiment reply or missing reply ID")
+        except Exception as e:
+            logging.error(f"Failed to post sentiment reply: {e}")
+            reply_id = None
+
+        # Post third tweet with PDF link and call to action
+        if pdf_url:
+            third_tweet_text = (
+                f"📄 Dive deeper: The full briefing PDF is available here 👉 {pdf_url}\n\n"
+                "Includes detailed economic calendars, upcoming IPOs & earnings, "
+                "plus the latest news driving market moves. Stay informed and ahead of the curve!\n\n"
+                "This is NFA, not financial advice. Always do your own research before making investment decisions.\n\n"
+                "#MarketBriefing #Finance #Investing"
+            )
         else:
-            logging.error("Failed to post sentiment reply or missing reply ID")
+            third_tweet_text = None
+
+        if third_tweet_text:
+            try:
+                resp3 = client.create_tweet(
+                    text=third_tweet_text,
+                    in_reply_to_tweet_id=reply_id or tweet_id
+                )
+                if resp3 is None or resp3.data is None:
+                    logging.error("Failed to create third tweet: response or data is None")
+                else:
+                    third_tweet_id = resp3.data.get("id")
+                    if not third_tweet_id:
+                        logging.error("Third tweet creation response missing tweet ID")
+                    else:
+                        third_tweet_url = f"https://x.com/{BOT_USER_ID}/status/{third_tweet_id}"
+                        logging.info(f"↪️ Posted PDF link tweet: {third_tweet_url}")
+                        log_tweet_to_csv(
+                            third_tweet_id,
+                            datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S'),
+                            "briefing_pdf_link",
+                            "briefing",
+                            period,
+                            third_tweet_url
+                        )
+            except Exception as e:
+                logging.error(f"Exception posting third tweet: {e}")
 
     finally:
         # Cleanup temp files safely
         try:
-            if os.path.exists(img_path):
+            if img_path and os.path.exists(img_path):
                 os.remove(img_path)
-            if os.path.exists(temp_dir):
+            if temp_dir and os.path.exists(temp_dir):
                 os.rmdir(temp_dir)
         except Exception as cleanup_err:
             logging.warning(f"Failed to clean up temp files: {cleanup_err}")
-
 
 # --- Log tweet to CSV file
 TWEET_LOG_FILE = os.path.join(LOG_DIR, "tweet_log.csv")
