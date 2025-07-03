@@ -158,9 +158,6 @@ def timed_create_tweet(text: str, in_reply_to_tweet_id=None, part_index: int = N
 
 def timed_post_pdf_briefing(filepath: str, period: str = "morning", headline=None, summary=None, 
                             equity_block=None, macro_block=None, crypto_block=None, retry_count=0):
-    """
-    Retry-safe version of post_pdf_briefing with progressive backoff.
-    """
     start = time.monotonic()
     if has_reached_daily_limit():
         logging.warning(f"🚫 Daily tweet limit reached — skipping {period} briefing.")
@@ -175,16 +172,11 @@ def timed_post_pdf_briefing(filepath: str, period: str = "morning", headline=Non
         temp_dir = tempfile.mkdtemp()
         img_path = os.path.join(temp_dir, "page_1.png")
         images[0].save(img_path, "PNG")
-        media_id = api.media_upload(filename=img_path).media_id
-
-        caption = get_briefing_caption(period, headline=headline, summary=summary)
-        resp = client.create_tweet(text=caption, media_ids=[media_id])
-        tweet_id = resp.data["id"]
-
-        url = f"https://x.com/{BOT_USER_ID}/status/{tweet_id}"
-        date_str = datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
-        log_tweet_to_csv(tweet_id, date_str, "briefing", "briefing", period, url)
-        logging.info(f"✅ Posted {period} briefing main tweet: {url}")
+        media_resp = api.media_upload(filename=img_path)
+        media_id = getattr(media_resp, "media_id", None)
+        if not media_id:
+            logging.error("❌ Media upload failed: no media_id returned.")
+            return
 
         sentiment = format_market_sentiment(
             period,
@@ -193,40 +185,69 @@ def timed_post_pdf_briefing(filepath: str, period: str = "morning", headline=Non
             crypto_block=crypto_block,
             movers=None
         )
+
+        caption = get_briefing_caption(period, headline=headline, summary=summary)
+
+        try:
+            # 🛡️ Retry-safe caption + image tweet
+            resp = client.create_tweet(text=caption, media_ids=[media_id])
+            logging.debug(f"Tweet creation response: {resp}")
+
+            if resp is None or not hasattr(resp, "data") or resp.data is None:
+                logging.error("Failed to create tweet: response or data is None")
+                return
+
+            tweet_id = resp.data.get("id")
+            if tweet_id is None:
+                logging.error("Tweet creation response missing tweet ID")
+                return
+
+        except (tweepy.errors.TweepyException, requests.exceptions.RequestException, ConnectionError) as e:
+            error_str = str(e).lower()
+            if ("timeout" in error_str or "connection" in error_str or "remote end closed" in error_str) and retry_count < MAX_RETRY_ATTEMPTS:
+                delay = RETRY_DELAYS[retry_count]
+                logging.warning(f"⚠️ PDF post attempt {retry_count+1} failed: {e}. Retrying in {delay}s.")
+                time.sleep(delay)
+                return timed_post_pdf_briefing(
+                    filepath=filepath,
+                    period=period,
+                    headline=headline,
+                    summary=summary,
+                    equity_block=equity_block,
+                    macro_block=macro_block,
+                    crypto_block=crypto_block,
+                    retry_count=retry_count + 1
+                )
+            raise
+
+        # Log main tweet
+        url = f"https://x.com/{BOT_USER_ID}/status/{tweet_id}"
+        date_str = datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
+        log_tweet_to_csv(tweet_id, date_str, "briefing", "briefing", period, url)
+        logging.info(f"✅ Posted {period} briefing main tweet: {url}")
+
+        # Post reply with sentiment
+        # Post reply with sentiment
         resp2 = client.create_tweet(text=sentiment, in_reply_to_tweet_id=tweet_id)
-        reply_id = resp2.data["id"]
-        reply_url = f"https://x.com/{BOT_USER_ID}/status/{reply_id}"
-        log_tweet_to_csv(reply_id, datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S'),
-                         "briefing_reply", "briefing", period, reply_url)
-        logging.info(f"↪️ Posted sentiment reply for {period}: {reply_url}")
+        reply_id = getattr(resp2.data, "id", None) if resp2 and resp2.data else None
+        if reply_id:
+            reply_url = f"https://x.com/{BOT_USER_ID}/status/{reply_id}"
+            log_tweet_to_csv(reply_id, datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S'),
+                            "briefing_reply", "briefing", period, reply_url)
+            logging.info(f"↪️ Posted sentiment reply for {period}: {reply_url}")
+        else:
+            logging.error("Failed to post sentiment reply or missing reply ID")
 
-        os.remove(img_path)
-        os.rmdir(temp_dir)
+    finally:
+        # Cleanup temp files safely
+        try:
+            if os.path.exists(img_path):
+                os.remove(img_path)
+            if os.path.exists(temp_dir):
+                os.rmdir(temp_dir)
+        except Exception as cleanup_err:
+            logging.warning(f"Failed to clean up temp files: {cleanup_err}")
 
-    except (tweepy.errors.TweepyException, requests.exceptions.RequestException, ConnectionError) as e:
-        elapsed = time.monotonic() - start
-        error_str = str(e).lower()
-        if ("timeout" in error_str or "connection" in error_str or "remote end closed" in error_str) and retry_count < MAX_RETRY_ATTEMPTS:
-            delay = RETRY_DELAYS[retry_count]
-            logging.warning(f"⚠️ PDF post attempt {retry_count+1} failed: {e}. Retrying in {delay}s.")
-            time.sleep(delay)
-            return timed_post_pdf_briefing(
-                filepath=filepath,
-                period=period,
-                headline=headline,
-                summary=summary,
-                equity_block=equity_block,
-                macro_block=macro_block,
-                crypto_block=crypto_block,
-                retry_count=retry_count + 1
-            )
-
-        logging.error(f"❌ PDF post failed after {elapsed:.2f}s: {e}")
-        raise
-
-    except Exception as e:
-        logging.error(f"❌ Failed to post {period} briefing: {e}")
-        raise
 
 # --- Log tweet to CSV file
 TWEET_LOG_FILE = os.path.join(LOG_DIR, "tweet_log.csv")

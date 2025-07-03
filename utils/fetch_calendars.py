@@ -40,6 +40,7 @@ def get_earnings_calendar(start_date: str = None, end_date: str = None) -> list:
         return finnhub_client.earnings_calendar(
             _from=start_date, to=end_date, symbol="", international=False
         ).get("earningsCalendar", [])
+
     except Exception as e:
         print(f"Error fetching earnings calendar: {e}")
         return []

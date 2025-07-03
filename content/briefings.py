@@ -1,16 +1,26 @@
 import os
 import csv
+import finnhub
 from datetime import datetime, timedelta
 from utils.text_utils import (
     TICKER_INFO, 
     is_weekend, 
     get_headlines_for_tickers, 
     flatten_and_deduplicate_headlines, 
-    is_relevant_headline, 
-    treasury_futures_to_yield_change
+    is_relevant_headline
+)
+from utils.yield_utils import (
+    treasury_futures_to_yield_change,
+    convert_us_treasury_yields
 )
 from utils.config import DATA_DIR
-from utils.fetch_stock_data import fetch_last_price_yf
+from utils.fetch_stock_data import (
+    fetch_last_price_yf, 
+    fetch_ticker_data,
+    get_top_movers_from_constituents,
+    fetch_stock_news,
+    fetch_prior_close_yield
+)
 from utils.pdf_renderer import render_pdf
 from data.ticker_blocks import (
     ASIA_EQUITY, 
@@ -18,29 +28,41 @@ from data.ticker_blocks import (
     US_EQUITY, 
     FX_PAIRS, 
     COMMODITIES, 
-    RATES 
+    RATES,
+    YIELD_SYMBOLS 
 )
 from utils.fetch_token_data import get_top_tokens_data
 from utils.gpt import generate_gpt_text
 from utils.x_post import timed_post_pdf_briefing
-from utils.fetch_stock_data import get_top_movers_from_constituents, fetch_stock_news
+
 from utils.fetch_calendars import (
     scrape_investing_econ_calendar,
     get_ipo_calendar,
     get_earnings_calendar,
 )
-
-
 import logging
 import inspect
 
 BRIEFING_DIR = os.path.join(DATA_DIR, "briefings")
 os.makedirs(BRIEFING_DIR, exist_ok=True)
 
+api_key = os.getenv("FINNHUB_API_KEY")
+finnhub_client = finnhub.Client(api_key=api_key)
+
 def run_briefing(period: str):
     logging.info(f"Generating {period} market briefing PDF")
     pdf_path = generate_briefing_pdf(period)
-    timed_post_pdf_briefing(pdf_path, period=period)
+    
+    # You'll want to get the market blocks again or modify generate_briefing_pdf to return them
+    equity_block, macro_block, crypto_block = get_market_blocks(period)
+    
+    timed_post_pdf_briefing(
+        pdf_path,
+        period=period,
+        equity_block=equity_block,
+        macro_block=macro_block,
+        crypto_block=crypto_block
+    )
 
 def fetch_crypto_block() -> dict:
     """
@@ -97,32 +119,28 @@ def generate_briefing_pdf(briefing_type: str = "morning") -> str:
     econ_df = scrape_investing_econ_calendar()
     ipo_list = get_ipo_calendar()
     earnings_list = get_earnings_calendar()
+    
+    #Debugging output
+    # start_date = datetime.utcnow().date().isoformat()
+    # end_date = start_date
+    # calendar = finnhub_client.earnings_calendar(_from=start_date, to=end_date, symbol="", international=False)
+    # earnings = calendar.get("earningsCalendar", [])
+    # print("Sample earnings:", earnings[:3])
 
     # ─── Build Market Data Blocks (implement as you already do) ───────────────
     equity_block, macro_block, crypto_block = get_market_blocks(briefing_type)
 
-    print("Morning briefing macro block keys:", macro_block.keys())
-    print("Morning briefing macro block sample data:", list(macro_block.items())[:5])
+    # print("Morning briefing macro block keys:", macro_block.keys())
+    # print("Morning briefing macro block sample data:", list(macro_block.items())[:5])
 
-    # --- BEGIN YIELD CONVERSION BLOCK ---
-    macro_yield_lines = []
-    for label, value in macro_block.items():
-        if "US Treasury" in label:
-            yield_delta = treasury_futures_to_yield_change(label, value)
-            if yield_delta:
-                macro_yield_lines.append(f"{label.replace('US Treasury','yield')}: {yield_delta}")
+    # Convert US Treasury futures prices to yields in both blocks
+    equity_block = convert_us_treasury_yields(equity_block)
+    macro_block = convert_us_treasury_yields(macro_block)
 
     # ─── GPT Comment Block ────────────────────────────────────────────────────
-    macro_summary = ", ".join(
-        f"{k}: {v}" for k, v in macro_block.items() if v != "N/A" and "US Treasury" not in k
-    )
-    if macro_yield_lines:
-        macro_summary = macro_summary + ", " + ", ".join(macro_yield_lines)
-    comment_prompt = (
-        f"In 2-3 sentences, provide a hedge fund style summary of the {briefing_type} market sentiment "
-        f"based on: {macro_summary}"
-    )
-    comment = generate_gpt_text(comment_prompt, max_tokens=150).strip()
+    combined_prices = {**equity_block, **macro_block, **crypto_block}
+
+    comment = generate_gpt_comment(combined_prices, briefing_type)
 
     # ─── Headlines for Page 2 ────────────────────────────────────────────────
     headlines = get_briefing_headlines(briefing_type) 

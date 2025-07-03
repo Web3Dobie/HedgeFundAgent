@@ -16,6 +16,7 @@ from datetime import datetime
 import logging
 from utils.config import DATA_DIR
 
+
 # Load spaCy model
 _NLP = spacy.load("en_core_web_sm")
 
@@ -390,10 +391,6 @@ def get_briefing_caption(period: str, headline: str = None, summary: str = None)
             f"#markets"
         )
 
-from datetime import datetime
-
-from datetime import datetime
-
 def format_market_sentiment(period, equity_block, macro_block, crypto_block, movers=None):
     """
     Builds the text-only market sentiment tweet for the specified period.
@@ -499,23 +496,3 @@ def format_market_sentiment(period, equity_block, macro_block, crypto_block, mov
 
     return "\n".join(lines)
 
-def treasury_futures_to_yield_change(label, value):
-    """
-    Estimate the change in yield (%) from the change in the futures price.
-    Returns a string like: "-0.01%" for a small move lower in yield.
-    """
-    match = re.search(r"\(([-+]\d+\.\d+)%\)", value)
-    if not match:
-        return None  # No change info
-
-    pct_change = float(match.group(1))
-    # Rule of thumb: +1% in price ≈ X% drop in yield (negative correlation)
-    if "2Y" in label:
-        multiplier = -0.40  # +1% in price = -0.40% in yield (40bps)
-    elif "10Y" in label:
-        multiplier = -0.17  # +1% in price = -0.17% in yield (17bps)
-    else:
-        multiplier = -0.20  # Default fallback
-
-    yield_change = pct_change * multiplier
-    return f"{yield_change:+.2f}%"

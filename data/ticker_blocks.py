@@ -37,7 +37,7 @@ COMMODITIES = {
 }
 
 RATES = {
-    "2Y US Treasury": "ZT=F",
+    # "2Y US Treasury": "5YY=F",
     "10Y US Treasury": "ZN=F",
 }
 
@@ -48,4 +48,11 @@ CRYPTO = {
     "ripple": "XRP",  # Ripple
     "sui": "SUI",  # Sui
     "cardano": "ADA",  # Cardano
+}
+
+YIELD_SYMBOLS = {
+    "3M": "^IRX",
+    "5Y": "^FVX",
+    "10Y": "^TNX",
+    "30Y": "^TYX"
 }

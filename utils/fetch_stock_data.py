@@ -6,7 +6,7 @@ import logging          # Used for logging errors and information
 import json             # Used for handling JSON data
 from tvscreener import StockScreener
 from datetime import datetime, timedelta
-from utils.text_utils import load_ticker_info
+from utils.text_utils import TICKER_INFO
 
 from dotenv import load_dotenv
 from utils.config import (FINNHUB_API_KEY, ALPHA_VANTAGE_API_KEY)
@@ -15,8 +15,6 @@ logger = logging.getLogger(__name__)
 
 # Load environment variables from .env
 load_dotenv()
-
-TICKER_INFO = load_ticker_info()
 
 def fetch_ticker_data(ticker: str, period="1mo") -> pd.DataFrame:
     """
@@ -38,6 +36,16 @@ def fetch_ticker_data(ticker: str, period="1mo") -> pd.DataFrame:
     except Exception as e:
         print(f"Error fetching data for {ticker}: {e}")
         return pd.DataFrame()  # Return an empty DataFrame on error
+
+def fetch_prior_close_yield(symbol: str) -> float:
+    """
+    Get previous day's closing yield (%) for treasury instruments.
+    Yahoo symbols like ^IRX (2Y), ^TNX (10Y), ^TYX (30Y) return yield * 100.
+    """
+    df = fetch_ticker_data(symbol, period="2d")
+    if len(df) >= 2:
+        return round(df["Close"].iloc[-2], 2)  # Convert from 428 → 4.28%
+    return None
 
 
 def fetch_stock_news(ticker: str, start_date: str, end_date: str):

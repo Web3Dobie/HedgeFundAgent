@@ -23,11 +23,15 @@ def safe_value(val):
         return "-"
     return str(val)
 
+def check_page_break(pdf, row_height):
+    if pdf.get_y() + row_height > pdf.page_break_trigger:
+        pdf.add_page()
+
 def render_economic_calendar_table(pdf, econ_df):
     pdf.set_font("DejaVu", "B", 12)
     pdf.cell(0, 10, "Economic Calendar", ln=True)
 
-    col_widths = [80, 20, 25, 25, 25, 25]  # Adjust columns for new data
+    col_widths = [80, 20, 20, 20, 20, 20]  # Adjust columns for new data
     headers = ["Event", "Currency", "Time", "Actual", "Forecast", "Previous"]
 
     pdf.set_font("DejaVu", "B", 11)
@@ -45,7 +49,57 @@ def render_economic_calendar_table(pdf, econ_df):
         previous = row.get("previous", "-")
 
         row_items = [event, currency, time, actual, forecast, previous]
+
+        # Estimate height of multi_cell for event column:
+        pdf.set_font("DejaVu", "", 10)
+        lines = pdf.multi_cell(col_widths[0], 7, event, split_only=True)
+        row_height = 7 * len(lines)
+
+         # Check if adding this row would overflow page, add page if so
+        check_page_break(pdf, row_height)
+
+        #Print the row with borders
         for i, item in enumerate(row_items):
+            if i == 0:  # Event column
+                x = pdf.get_x()
+                y = pdf.get_y()
+                pdf.multi_cell(col_widths[i], 7, item, border=1)
+                pdf.set_xy(x + col_widths[i], y)
+            else:
+                pdf.cell(col_widths[i], 7, item, border=1)
+
+        pdf.ln()
+
+    pdf.ln(8)
+
+def render_earnings_table(pdf, earnings_list):
+    pdf.set_font("DejaVu", "B", 12)
+    pdf.cell(0, 10, "Earnings Announcements", ln=True)
+
+    # Add Time column, adjust widths accordingly
+    col_widths = [25, 25, 25, 30, 30, 30]  # Symbol, Time, EPS (est), EPS (actual), Rev (est), Rev (actual)
+    headers = ["Symbol", "Time", "EPS (est)", "EPS (actual)", "Rev (est)", "Rev (actual)"]
+
+    pdf.set_font("DejaVu", "B", 11)
+    for i, header in enumerate(headers):
+        pdf.cell(col_widths[i], 8, header, border=1, align="C")
+    pdf.ln()
+
+    pdf.set_font("DejaVu", "", 10)
+    for e in earnings_list:
+        symbol = e.get('symbol', '-')
+        time = e.get('hour', '-') or '-'  # Handle empty strings as well
+        eps_est = str(e.get('epsEstimate') or '-')
+        eps_act = str(e.get('epsActual') or '-')
+        rev_est_raw = e.get('revenueEstimate')
+        rev_act_raw = e.get('revenueActual')
+
+        rev_est = f"${int(rev_est_raw):,}" if isinstance(rev_est_raw, (int, float)) else "-"
+        rev_act = f"${int(rev_act_raw):,}" if isinstance(rev_act_raw, (int, float)) else "-"
+
+        row = [symbol, time, eps_est, eps_act, rev_est, rev_act]
+
+        for i, item in enumerate(row):
             pdf.cell(col_widths[i], 7, item, border=1)
         pdf.ln()
 
@@ -76,17 +130,12 @@ def render_calendar_page(econ_df, ipo_list, earnings_list, pdf):
     pdf.ln(5)
 
     # ─── Earnings Calendar ───────────────────────────────
-    pdf.set_font("DejaVu", "B", 12)
-    pdf.cell(0, 8, "Earnings Announcements", ln=True)
-    pdf.set_font("DejaVu", size=11)
     if earnings_list:
-        for e in earnings_list:
-            symbol = e.get('symbol')
-            eps = e.get('epsEstimate', '-')
-            rev = e.get('revenueEstimate')
-            rev_display = f"${int(rev):,}" if isinstance(rev, (int, float)) else "-"
-            pdf.cell(0, 7, f"- {symbol}: EPS: {eps}, Rev: {rev_display}", ln=True)
+        render_earnings_table(pdf, earnings_list)
     else:
+        pdf.set_font("DejaVu", "B", 12)
+        pdf.cell(0, 10, "Earnings Announcements", ln=True)
+        pdf.set_font("DejaVu", size=11)
         pdf.cell(0, 7, "No earnings today.", ln=True)
 
 def render_pdf(
