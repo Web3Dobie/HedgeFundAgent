@@ -112,8 +112,20 @@ def post_hedgefund_comment():
     prompt = build_prompt(headline["headline"], headline.get("summary", ""), category)
 
     tweet = generate_gpt_tweet(prompt)
+    
+    # === Begin Content Filter Handling Patch ===
+    # Check if tweet is a dict and Azure flagged it (depends on your GPT wrapper return, adjust as needed)
+    if isinstance(tweet, dict) and tweet.get("error", {}).get("code") == "contentfilter":
+        logger.warning(f"[FILTERED] Commentary blocked by Azure content filter: {headline['headline']}")
+        # Mark as used with 'filtered' status so this headline is never retried
+        mark_headline_used_in_hourly_commentary(headline["headline"], reason="filtered")
+        # Optionally: notify Telegram here
+        return
+
+    # Or if tweet is just None/empty (could happen after filtering)
     if not tweet:
-        logger.error("GPT did not return a tweet.")
+        logger.error(f"[EMPTY] Commentary failed for: {headline['headline']}")
+        mark_headline_used_in_hourly_commentary(headline["headline"], reason="empty")
         return
 
     cashtags = extract_cashtags(tweet)

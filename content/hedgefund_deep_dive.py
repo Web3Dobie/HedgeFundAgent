@@ -41,8 +41,16 @@ def post_hedgefund_deep_dive():
     prompt = build_deep_dive_prompt(top_headline["headline"], top_headline.get("summary", ""))
     thread = generate_gpt_thread(prompt, max_parts=3)
 
-    if not thread or len(thread) < 2:
-        logger.error("GPT did not return a valid deep-dive thread.")
+   # === Begin Content Filter Handling Patch ===
+    # If thread is a dict and Azure flagged it, or it's empty/None
+    if isinstance(thread, dict) and thread.get("error", {}).get("code") == "contentfilter":
+        logger.warning(f"[FILTERED] Deep dive blocked by Azure content filter: {top_headline['headline']}")
+        mark_headline_used_in_hourly_commentary(top_headline["headline"], reason="filtered")
+        return
+
+    if not thread or not isinstance(thread, list) or not any(thread):
+        logger.error(f"[EMPTY] Deep dive failed for: {top_headline['headline']}")
+        mark_headline_used_in_hourly_commentary(top_headline["headline"], reason="empty")
         return
 
     # Extract unique cashtags from all parts
