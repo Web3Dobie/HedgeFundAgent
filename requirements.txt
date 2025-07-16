@@ -1,3 +1,4 @@
+# Core framework
 matplotlib
 pandas
 pandas-ta
@@ -10,4 +11,37 @@ python-dotenv
 feedparser
 spacy
 finnhub-python
-openpypl
+openpyxl
+beautifulsoup4
+
+# Financial data (was missing)
+yfinance
+tvscreener
+
+# Web and API (was missing)
+fastapi
+uvicorn
+
+# Azure services (was missing)
+azure-storage-blob
+azure-identity
+azure-keyvault-secrets
+
+# PDF generation (was missing)
+fpdf2
+pdf2image
+Pillow
+
+# Web scraping extras (was missing)
+lxml
+html5lib
+
+# Communication (was missing)
+python-telegram-bot
+
+# Utilities (was missing)
+requests-oauthlib
+python-dateutil
+pytz
+numpy
+scipy
