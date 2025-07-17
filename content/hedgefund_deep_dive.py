@@ -11,6 +11,7 @@ from utils.text_utils import (
 )
 from utils.x_post import post_thread
 from utils.fetch_stock_data import fetch_last_price
+from utils.market_data import fetch_last_price
 
 logger = logging.getLogger("hedgefund_deep_dive")
 
@@ -66,7 +67,7 @@ def post_hedgefund_deep_dive():
     prices = {}
     for tag in all_cashtags:
         ticker = tag.strip("$")
-        price_data = fetch_last_price_yf(ticker)
+        price_data = fetch_last_price(ticker)
         if price_data:
             prices[tag] = price_data
 

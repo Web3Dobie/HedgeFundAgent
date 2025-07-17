@@ -15,7 +15,9 @@ from utils.text_utils import (
     fetch_scored_headlines
 )
 from utils.theme_tracker import load_recent_themes, extract_theme, is_duplicate_theme, track_theme
+from utils.market_data import fetch_last_price
 from utils.fetch_stock_data import fetch_last_price
+from utils.ib_gateway_client import fetch_last_price_yf
 from utils.x_post import post_tweet
 from utils.hourly_utils import (
     get_unused_headline_today_for_hourly,
@@ -135,7 +137,7 @@ def post_hedgefund_comment():
     for tag in cashtags:
         ticker = tag.strip("$")
         if is_valid_ticker(ticker):
-            data = fetch_last_price_yf(ticker)
+            data = fetch_last_price(ticker)
             if data:
                 prices[tag] = data
 

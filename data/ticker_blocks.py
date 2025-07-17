@@ -1,34 +1,34 @@
 # data/ticker_blocks.py
-# Updated for Interactive Brokers Gateway symbols
+# Updated for Interactive Brokers Gateway symbols - ALL INDICES AS FUTURES
 
 ASIA_EQUITY = {
-    "Nikkei 225": "N225-IND-JPY",      # Nikkei 225 Index
-    "KOSPI": "KOSPI-IND-KRW",          # Korean index
-    "Hang Seng": "HSI-IND-HKD",        # Hong Kong
-    "CSI 300": "300-IND-CNH",          # China CSI 300
+    "Nikkei 225": "NK-FUT-JPY",        # Nikkei 225 futures
+    "KOSPI": "KS200-FUT-KRW",          # KOSPI 200 futures  
+    "Hang Seng": "HSI-FUT-HKD",        # Hang Seng futures
+    "CSI 300": "A50-FUT-USD",          # FTSE China A50 futures (more liquid than CSI 300)
 }
 
 EUROPE_EQUITY = {
-    "Euro Stoxx 50": "SX5E-IND-EUR",   # Euro Stoxx 50
-    "FTSE 100": "UKX-IND-GBP",         # UK FTSE 100
-    "DAX": "DAX-IND-EUR",              # German DAX
-    "CAC 40": "CAC-IND-EUR",           # French CAC 40
+    "Euro Stoxx 50": "ESTX50-FUT-EUR",   # Euro Stoxx 50 futures
+    "FTSE 100": "Z-FUT-GBP",           # FTSE 100 futures
+    "DAX": "DAX-FUT-EUR",             # DAX futures
+    "CAC 40": "CAC40-FUT-EUR",           # CAC 40 futures
 }
 
 US_EQUITY = {
     "S&P 500": "ES-FUT-USD",           # E-mini S&P 500 futures
     "Dow Jones": "YM-FUT-USD",         # E-mini Dow futures
-    "NASDAQ Composite": "NQ-FUT-USD",  # E-mini NASDAQ futures
+    "NASDAQ": "NQ-FUT-USD",            # E-mini NASDAQ futures
     "Russell 2000": "RTY-FUT-USD",     # Russell 2000 futures
 }
 
 FX_PAIRS = {
-    "USD/JPY": "USDJPY-CASH-JPY",      # USD/JPY spot
-    "USD/CNH": "USDCNH-CASH-CNH",      # USD/CNH offshore
-    "USD/AUD": "AUDUSD-CASH-AUD",      # AUD/USD (note: IB quotes as AUDUSD)
-    "EUR/USD": "EURUSD-CASH-EUR",      # EUR/USD
-    "GBP/USD": "GBPUSD-CASH-GBP",      # GBP/USD
-    "EUR/CHF": "EURCHF-CASH-EUR",      # EUR/CHF
+    "USD/JPY": "USD.JPY-CASH-USD",      # USD/JPY spot
+    "EUR/USD": "EUR.USD-CASH-USD",      # EUR/USD spot
+    "GBP/USD": "GBP.USD-CASH-USD",      # GBP/USD spot
+    "USD/CHF": "USD.CHF-CASH-USD",      # USD/CHF spot
+    "AUD/USD": "AUD.USD-CASH-USD",      # AUD/USD spot
+    "USD/CAD": "USD.CAD-CASH-USD",      # USD/CAD spot
 }
 
 COMMODITIES = {
@@ -41,6 +41,8 @@ COMMODITIES = {
 
 RATES = {
     "10Y US Treasury": "ZN-FUT-USD",   # 10-Year Treasury Note futures
+    "2Y US Treasury": "ZT-FUT-USD",    # 2-Year Treasury Note futures
+    "30Y US Treasury": "ZB-FUT-USD",   # 30-Year Treasury Bond futures
 }
 
 # For crypto, we'll keep the CoinGecko IDs since IB doesn't have good crypto coverage
@@ -53,10 +55,9 @@ CRYPTO = {
     "cardano": "ADA",
 }
 
-# Treasury yield symbols for direct yield data
+# Treasury yield symbols for direct yield data (these might be indices, not futures)
 YIELD_SYMBOLS = {
-    "3M": "IRX-IND-USD",
-    "5Y": "FVX-IND-USD", 
-    "10Y": "TNX-IND-USD",
-    "30Y": "TYX-IND-USD"
+    "2Y": "ZT-FUT-USD",    # Use futures for yield calculation
+    "10Y": "ZN-FUT-USD",   # Use futures for yield calculation  
+    "30Y": "ZB-FUT-USD"    # Use futures for yield calculation
 }
