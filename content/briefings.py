@@ -18,7 +18,7 @@ from utils.yield_utils import (
 )
 from utils.config import DATA_DIR
 from utils.fetch_stock_data import (
-    fetch_last_price_yf, 
+    fetch_last_price, 
     fetch_ticker_data,
     get_top_movers_from_constituents,
     fetch_stock_news,

@@ -10,7 +10,7 @@ from utils.text_utils import (
     is_valid_ticker
 )
 from utils.x_post import post_thread
-from utils.fetch_stock_data import fetch_last_price_yf
+from utils.fetch_stock_data import fetch_last_price
 
 logger = logging.getLogger("hedgefund_deep_dive")
 

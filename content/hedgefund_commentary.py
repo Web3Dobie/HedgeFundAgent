@@ -15,7 +15,7 @@ from utils.text_utils import (
     fetch_scored_headlines
 )
 from utils.theme_tracker import load_recent_themes, extract_theme, is_duplicate_theme, track_theme
-from utils.fetch_stock_data import fetch_last_price_yf
+from utils.fetch_stock_data import fetch_last_price
 from utils.x_post import post_tweet
 from utils.hourly_utils import (
     get_unused_headline_today_for_hourly,

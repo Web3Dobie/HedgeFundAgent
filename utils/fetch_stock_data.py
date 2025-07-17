@@ -1,273 +1,262 @@
 # utils/fetch_stock_data.py
-# Pure IB Gateway implementation - no yfinance fallback
+# Simplified IB Gateway integration - only what you actually use
 
 import pandas as pd
 import requests
-import os
 import logging
-import json
-from datetime import datetime, timedelta
-from utils.text_utils import TICKER_INFO
-
-# IB Gateway imports
+import time
+from datetime import datetime
+from typing import Dict, List, Optional
 from ib_insync import *
 
 from dotenv import load_dotenv
-from utils.config import (FINNHUB_API_KEY, ALPHA_VANTAGE_API_KEY)
+from utils.config import FINNHUB_API_KEY, ALPHA_VANTAGE_API_KEY
+from utils.text_utils import TICKER_INFO
+from data.ticker_blocks import CRYPTO
 
-logger = logging.getLogger(__name__)
 load_dotenv()
+logger = logging.getLogger(__name__)
 
-# Global IB client
-_ib_client = None
+# Simple global IB client
+_ib = None
 
-class IBGatewayClient:
-    """Pure IB Gateway client for all market data"""
-    
-    def __init__(self, host='135.225.86.140', port=7497, client_id=1):
-        self.ib = IB()
-        self.host = host
-        self.port = port
-        self.client_id = client_id
-        self.connected = False
-        
-    def connect(self) -> bool:
-        """Connect to IB Gateway - fail fast if unavailable"""
+def get_ib_connection():
+    """Get or create IB connection"""
+    global _ib
+    if _ib is None or not _ib.isConnected():
         try:
-            if not self.ib.isConnected():
-                self.ib.connect(self.host, self.port, self.client_id)
-                self.ib.reqMarketDataType(3)  # Delayed data
-                self.connected = True
-                logger.info("✅ Connected to IB Gateway")
-            return True
+            _ib = IB()
+            _ib.connect('135.225.86.140', 7497, 1)
+            _ib.reqMarketDataType(3)  # Delayed data
+            logger.info("✅ Connected to IB Gateway")
         except Exception as e:
-            logger.error(f"❌ IB Gateway connection failed: {e}")
-            raise ConnectionError(f"IB Gateway unavailable: {e}")
+            logger.warning(f"⚠️ IB Gateway unavailable: {e}")
+            _ib = None
+    return _ib
+
+def parse_ib_symbol(symbol: str):
+    """Parse symbol to IB contract - simplified version"""
+    if '-' not in symbol:
+        return Stock(symbol, 'SMART', 'USD')
     
-    def disconnect(self):
-        """Disconnect from IB Gateway"""
-        if self.ib.isConnected():
-            self.ib.disconnect()
-            self.connected = False
-            logger.info("Disconnected from IB Gateway")
+    parts = symbol.split('-')
+    if len(parts) != 3:
+        return Stock(symbol, 'SMART', 'USD')
     
-    def parse_ib_symbol(self, symbol: str):
-        """Parse IB symbol format: SYMBOL-TYPE-CURRENCY or plain symbols"""
-        try:
-            if '-' not in symbol:
-                # Regular stock symbol (AAPL, MSFT, etc.)
-                return Stock(symbol, 'SMART', 'USD')
-            
-            parts = symbol.split('-')
-            if len(parts) != 3:
-                return Stock(symbol, 'SMART', 'USD')
-            
-            sym, contract_type, currency = parts
-            
-            if contract_type == 'STK':
-                return Stock(sym, 'SMART', currency)
-                
-            elif contract_type == 'FUT':
-                # Futures mapping
-                exchange_map = {
-                    'ES': 'CME', 'YM': 'CBOT', 'NQ': 'CME', 'RTY': 'CME',
-                    'GC': 'COMEX', 'SI': 'COMEX', 'CL': 'NYMEX', 
-                    'NG': 'NYMEX', 'HG': 'COMEX', 'ZN': 'CBOT'
-                }
-                exchange = exchange_map.get(sym, 'CME')
-                # Use March 2025 expiry - update this periodically
-                expiry = '20250321'
-                return Future(sym, expiry, exchange)
-                
-            elif contract_type == 'CASH':
-                # FX pairs
-                return Forex(sym)
-                
-            elif contract_type == 'IND':
-                # Indices
-                exchange_map = {
-                    'N225': 'OSE.JPN',    # Nikkei
-                    'HSI': 'HKFE',        # Hang Seng
-                    'KOSPI': 'KRX',       # Korean
-                    'SX5E': 'DTB',        # Euro Stoxx 50
-                    'UKX': 'LIFFE',       # FTSE 100
-                    'DAX': 'DTB',         # German DAX
-                    'CAC': 'MONEP',       # French CAC
-                    '300': 'SSE',         # CSI 300
-                    'IRX': 'CBOE',        # 3M Treasury
-                    'FVX': 'CBOE',        # 5Y Treasury
-                    'TNX': 'CBOE',        # 10Y Treasury
-                    'TYX': 'CBOE'         # 30Y Treasury
-                }
-                exchange = exchange_map.get(sym, 'SMART')
-                return Index(sym, exchange, currency)
-                
-            else:
-                logger.warning(f"Unknown contract type: {contract_type}")
-                return Stock(sym, 'SMART', currency)
-                
-        except Exception as e:
-            logger.error(f"Error parsing symbol {symbol}: {e}")
-            return None
+    sym, contract_type, currency = parts
     
-    def get_price_data(self, symbol: str) -> dict:
-        """Get price data from IB Gateway"""
-        if not self.connect():
-            raise ConnectionError("Cannot connect to IB Gateway")
+    if contract_type == 'FUT':
+        exchange_map = {
+            'ES': 'CME', 'YM': 'CBOT', 'NQ': 'CME', 'RTY': 'CME',
+            'GC': 'COMEX', 'SI': 'COMEX', 'CL': 'NYMEX', 
+            'NG': 'NYMEX', 'HG': 'COMEX', 'ZN': 'CBOT'
+        }
+        exchange = exchange_map.get(sym, 'CME')
+        expiry = '20250321'  # Update quarterly
+        return Future(sym, expiry, exchange)
         
+    elif contract_type == 'CASH':
+        return Forex(sym)
+        
+    elif contract_type == 'IND':
+        exchange_map = {
+            'N225': 'OSE.JPN', 'HSI': 'HKFE', 'KOSPI': 'KRX',
+            'SX5E': 'DTB', 'UKX': 'LIFFE', 'DAX': 'DTB', 
+            'CAC': 'MONEP', '300': 'SSE',
+            'IRX': 'CBOE', 'FVX': 'CBOE', 'TNX': 'CBOE', 'TYX': 'CBOE'
+        }
+        exchange = exchange_map.get(sym, 'SMART')
+        return Index(sym, exchange, currency)
+    
+    return Stock(sym, 'SMART', currency)
+
+def fetch_last_price(symbol: str) -> dict:
+    """
+    Main price fetching function - IB Gateway with API fallback
+    Returns: {"price": float, "change_percent": float, "timestamp": str}
+    """
+    
+    # Try IB Gateway first
+    ib = get_ib_connection()
+    if ib:
         try:
-            contract = self.parse_ib_symbol(symbol)
-            if not contract:
-                raise ValueError(f"Could not create contract for {symbol}")
+            contract = parse_ib_symbol(symbol)
             
-            logger.debug(f"Requesting data for {symbol} -> {contract}")
-            
-            # Get historical data for change calculation
-            hist = self.ib.reqHistoricalData(
+            # Get historical for change calculation
+            hist = ib.reqHistoricalData(
                 contract,
                 endDateTime='',
-                durationStr='2 D',
+                durationStr='3 D',
                 barSizeSetting='1 day',
                 whatToShow='TRADES',
                 useRTH=True
             )
             
-            if not hist:
-                raise ValueError(f"No historical data available for {symbol}")
+            if len(hist) >= 2:
+                # Get current price
+                ticker = ib.reqMktData(contract)
+                ib.sleep(3)
+                
+                current_price = ticker.marketPrice() or ticker.last or hist[-1].close
+                prev_close = hist[-2].close
+                
+                if prev_close > 0:
+                    change_pct = ((current_price - prev_close) / prev_close) * 100
+                    
+                    # Format price
+                    if 'CASH' in symbol:
+                        formatted_price = round(float(current_price), 4)
+                    else:
+                        formatted_price = round(float(current_price), 2)
+                    
+                    return {
+                        "price": formatted_price,
+                        "change_percent": round(change_pct, 2),
+                        "timestamp": hist[-1].date.strftime('%Y-%m-%d')
+                    }
+                    
+        except Exception as e:
+            logger.warning(f"IB failed for {symbol}: {e}")
+    
+    # Fallback to APIs
+    return _fetch_price_fallback(symbol)
+
+def _fetch_price_fallback(symbol: str) -> dict:
+    """Fallback price fetching"""
+    
+    # Crypto via CoinGecko
+    if symbol.lower() in CRYPTO:
+        try:
+            url = f"https://api.coingecko.com/api/v3/simple/price"
+            params = {
+                'ids': symbol.lower(),
+                'vs_currencies': 'usd',
+                'include_24hr_change': 'true'
+            }
+            response = requests.get(url, params=params, timeout=10)
+            response.raise_for_status()
+            data = response.json()
             
-            # Get current market data
-            ticker = self.ib.reqMktData(contract)
-            self.ib.sleep(3)  # Wait longer for data
+            if symbol.lower() in data:
+                price_info = data[symbol.lower()]
+                return {
+                    "price": round(price_info['usd'], 4),
+                    "change_percent": round(price_info['usd_24h_change'], 2),
+                    "timestamp": datetime.now().strftime('%Y-%m-%d')
+                }
+        except Exception as e:
+            logger.error(f"CoinGecko failed for {symbol}: {e}")
+    
+    # Traditional assets via Alpha Vantage
+    try:
+        clean_symbol = symbol.split('-')[0]  # Remove IB suffixes
+        
+        url = "https://www.alphavantage.co/query"
+        params = {
+            'function': 'GLOBAL_QUOTE',
+            'symbol': clean_symbol,
+            'apikey': ALPHA_VANTAGE_API_KEY
+        }
+        response = requests.get(url, params=params, timeout=15)
+        response.raise_for_status()
+        data = response.json()
+        
+        if 'Global Quote' in data:
+            quote = data['Global Quote']
+            price = float(quote['05. price'])
+            change_pct = float(quote['10. change percent'].rstrip('%'))
             
-            # Calculate current price and change
-            latest_bar = hist[-1]
-            prev_bar = hist[-2] if len(hist) > 1 else latest_bar
-            
-            # Use market price if available, otherwise latest close
-            current_price = ticker.marketPrice() if ticker.marketPrice() and ticker.marketPrice() > 0 else latest_bar.close
-            prev_close = prev_bar.close
-            
-            if prev_close <= 0:
-                raise ValueError(f"Invalid previous close price for {symbol}")
-            
-            change_pct = ((current_price - prev_close) / prev_close) * 100
-            timestamp = latest_bar.date.date().isoformat()
-            
-            # Format price based on asset type
-            if 'CASH' in symbol:  # FX pairs
-                formatted_price = round(float(current_price), 4)
-            else:
-                formatted_price = round(float(current_price), 2)
-            
-            result = {
-                "price": formatted_price,
-                "change_percent": round(float(change_pct), 2),
-                "timestamp": timestamp
+            return {
+                "price": round(price, 2),
+                "change_percent": round(change_pct, 2),
+                "timestamp": quote['07. latest trading day']
             }
             
-            logger.debug(f"✅ {symbol}: ${formatted_price} ({change_pct:+.2f}%)")
-            return result
-            
-        except Exception as e:
-            logger.error(f"❌ Error fetching {symbol}: {e}")
-            raise
-
-def get_ib_client():
-    """Get or create global IB client"""
-    global _ib_client
-    if _ib_client is None:
-        _ib_client = IBGatewayClient()
-    return _ib_client
-
-def fetch_last_price_yf(symbol: str) -> dict:
-    """
-    Pure IB Gateway implementation - replaces yfinance entirely
-    Returns: {"price": float, "change_percent": float, "timestamp": str}
-    Raises: ConnectionError if IB Gateway unavailable
-    """
-    client = get_ib_client()
-    return client.get_price_data(symbol)
-
-def fetch_ticker_data(ticker: str, period="1mo") -> pd.DataFrame:
-    """
-    Fetch historical data using IB Gateway
-    """
-    client = get_ib_client()
-    if not client.connect():
-        raise ConnectionError("IB Gateway not available for historical data")
+    except Exception as e:
+        logger.error(f"Alpha Vantage failed for {symbol}: {e}")
     
-    try:
-        contract = client.parse_ib_symbol(ticker)
-        if not contract:
-            raise ValueError(f"Could not create contract for {ticker}")
-        
-        # Convert period to IB duration
-        period_map = {
-            '1mo': '1 M',
-            '3mo': '3 M', 
-            '6mo': '6 M',
-            '1y': '1 Y',
-            '2y': '2 Y'
-        }
-        duration = period_map.get(period, '1 M')
-        
-        bars = client.ib.reqHistoricalData(
-            contract,
-            endDateTime='',
-            durationStr=duration,
-            barSizeSetting='1 day',
-            whatToShow='TRADES',
-            useRTH=True
-        )
-        
-        if not bars:
-            return pd.DataFrame()
-        
-        # Convert to pandas DataFrame
-        df = util.df(bars)
-        df.set_index('date', inplace=True)
-        
-        # Rename columns to match yfinance format
-        column_map = {
-            'open': 'Open',
-            'high': 'High', 
-            'low': 'Low',
-            'close': 'Close',
-            'volume': 'Volume'
-        }
-        df = df.rename(columns=column_map)
-        
-        return df[['Open', 'High', 'Low', 'Close', 'Volume']]
-        
-    except Exception as e:
-        logger.error(f"Error fetching historical data for {ticker}: {e}")
-        return pd.DataFrame()
+    raise ConnectionError(f"All data sources failed for {symbol}")
 
-def fetch_prior_close_yield(symbol: str) -> float:
-    """Get previous day's closing yield using IB Gateway"""
-    try:
-        df = fetch_ticker_data(symbol, period="5d")  # Get more days for safety
-        if len(df) >= 2:
-            return round(float(df["Close"].iloc[-2]), 2)
-        return None
-    except Exception as e:
-        logger.error(f"Error fetching prior yield for {symbol}: {e}")
-        return None
+def get_top_movers_from_constituents(limit=5, include_extended=False) -> dict:
+    """
+    Get top movers - simplified for your briefings
+    """
+    symbols = list(TICKER_INFO.keys())[:20]  # Limit for performance
+    data = []
+    
+    for symbol in symbols:
+        try:
+            price_data = fetch_last_price(symbol)
+            price = price_data["price"]
+            change_pct = price_data["change_percent"]
+            data.append((symbol, price, change_pct))
+            time.sleep(0.1)  # Rate limiting
+        except Exception as e:
+            logger.warning(f"Failed to get {symbol}: {e}")
+            continue
+
+    movers = {
+        "top_gainers": sorted(data, key=lambda x: -x[2])[:limit],
+        "top_losers": sorted(data, key=lambda x: x[2])[:limit]
+    }
+
+    # Extended hours - placeholder (IB setup required)
+    if include_extended:
+        logger.warning("Extended hours not implemented")
+        movers["pre_market"] = []
+        movers["post_market"] = []
+
+    return movers
 
 def fetch_stock_news(ticker: str, start_date: str, end_date: str):
-    """Fetch news using Finnhub API (unchanged)"""
-    if not ticker:
-        raise ValueError("Ticker symbol cannot be blank.")
+    """
+    Fetch news - IB Gateway first, Finnhub fallback
+    IB Gateway provides limited news but it's real-time
+    """
     
-    if not start_date or not end_date:
-        raise ValueError("Both start_date and end_date must be provided.")
-
+    # Try IB Gateway news first
+    ib = get_ib_connection()
+    if ib:
+        try:
+            # Create contract for news request
+            contract = parse_ib_symbol(ticker)
+            
+            # Request news headlines (IB provides limited historical news)
+            news_providers = ib.reqNewsProviders()
+            if news_providers:
+                # Get news articles for the contract
+                # Note: IB news is more limited than Finnhub
+                news_articles = ib.reqHistoricalNews(
+                    conId=contract.conId if hasattr(contract, 'conId') else 0,
+                    providerCodes="BRFG+DJNL+BRFUPDN",  # Common IB news providers
+                    startDateTime=start_date + " 00:00:00",
+                    endDateTime=end_date + " 23:59:59",
+                    totalResults=10
+                )
+                
+                if news_articles:
+                    formatted_news = []
+                    for article in news_articles:
+                        formatted_news.append({
+                            "headline": article.headline,
+                            "source": article.providerCode,
+                            "date": article.time,
+                            "url": ""  # IB doesn't always provide URLs
+                        })
+                    
+                    logger.info(f"✅ Got {len(formatted_news)} news items from IB for {ticker}")
+                    return formatted_news
+                    
+        except Exception as e:
+            logger.warning(f"IB news failed for {ticker}: {e}")
+    
+    # Fallback to Finnhub (your existing implementation)
     try:
         url = (
             f"https://finnhub.io/api/v1/company-news?"
             f"symbol={ticker}&from={start_date}&to={end_date}&token={FINNHUB_API_KEY}"
         )
-        response = requests.get(url)
+        response = requests.get(url, timeout=10)
         response.raise_for_status()
         news = response.json()
 
@@ -280,64 +269,56 @@ def fetch_stock_news(ticker: str, start_date: str, end_date: str):
             }
             for article in news
         ]
-    except requests.RequestException as e:
-        logger.error(f"Error fetching news for {ticker}: {e}")
+    except Exception as e:
+        logger.error(f"Finnhub news failed for {ticker}: {e}")
         return []
 
-def fetch_market_summary():
-    """Fetch market summary using Finnhub API (unchanged)"""
+def fetch_prior_close_yield(symbol: str) -> float:
+    """Get previous day's yield - simplified"""
     try:
-        url = f"https://finnhub.io/api/v1/market/status?token={FINNHUB_API_KEY}"
-        response = requests.get(url)
-        response.raise_for_status()
-        return response.json()
-    except requests.RequestException as e:
-        logger.error(f"Error fetching market summary: {e}")
-        return {}
-
-def get_top_movers_from_constituents(limit=5, include_extended=False) -> dict:
-    """
-    Get top movers using IB Gateway data
-    Note: Extended hours data requires different IB setup
-    """
-    combined = sorted(TICKER_INFO.keys())
-    data = []
+        ib = get_ib_connection()
+        if ib:
+            contract = parse_ib_symbol(symbol)
+            hist = ib.reqHistoricalData(
+                contract,
+                endDateTime='',
+                durationStr='5 D',
+                barSizeSetting='1 day',
+                whatToShow='TRADES',
+                useRTH=True
+            )
+            if len(hist) >= 2:
+                return round(float(hist[-2].close), 3)
+    except Exception as e:
+        logger.warning(f"Prior yield fetch failed for {symbol}: {e}")
     
-    client = get_ib_client()
+    return None
+
+# Functions you don't actually use - removing them:
+# - fetch_ticker_data() - not used in content generation
+# - fetch_market_summary() - not used
+# - get_multi_asset_snapshot() - not used
+
+def test_simple_integration():
+    """Simple test of what you actually use"""
+    print("🧪 Testing Simplified IB Integration")
+    print("=" * 40)
     
-    for symbol in combined[:20]:  # Limit to avoid timeouts
-        try:
-            price_data = fetch_last_price_yf(symbol)
-            if price_data:
-                price = price_data["price"]
-                change_pct = price_data["change_percent"]
-                data.append((symbol, price, change_pct))
-        except Exception as e:
-            logger.warning(f"Could not get mover data for {symbol}: {e}")
-            continue
-
-    movers = {
-        "top_gainers": sorted(data, key=lambda x: -x[2])[:limit],
-        "top_losers": sorted(data, key=lambda x: x[2])[:limit]
-    }
-
-    # Extended hours would require additional IB setup
-    if include_extended:
-        logger.warning("Extended hours data not implemented with IB Gateway yet")
-        movers["pre_market"] = []
-        movers["post_market"] = []
-
-    return movers
-
-# Test function
-if __name__ == "__main__":
-    # Test the pure IB implementation
-    test_symbols = ["AAPL", "ES-FUT-USD", "EURUSD-CASH-EUR"]
+    test_symbols = ["AAPL", "ES-FUT-USD", "bitcoin"]
     
     for symbol in test_symbols:
         try:
-            print(f"Testing {symbol}...")
-            data = fetch_last_price_yf(symbol)
-            print(f"  ✅ Price: ${data['price']}, Change: {data['change_percent']:+.2f}%")
+            data = fetch_last_price(symbol)
+            print(f"✅ {symbol}: ${data['price']} ({data['change_percent']:+.2f}%)")
         except Exception as e:
-            print(f"  ❌ Failed: {e}")
+            print(f"❌ {symbol}: {e}")
+    
+    print("\n🔄 Testing top movers...")
+    try:
+        movers = get_top_movers_from_constituents(limit=3)
+        print(f"✅ Got {len(movers['top_gainers'])} gainers, {len(movers['top_losers'])} losers")
+    except Exception as e:
+        print(f"❌ Top movers failed: {e}")
+
+if __name__ == "__main__":
+    test_simple_integration()
