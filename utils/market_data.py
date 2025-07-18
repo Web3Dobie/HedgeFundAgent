@@ -1,7 +1,7 @@
 # utils/market_data.py
 """
-Simplified Market Data Client - IB Gateway ONLY
-No API fallbacks, clean and simple
+Updated Market Data Client - Using New Working IB Gateway
+Clean, simple, uses the new official IBAPI client
 """
 
 import logging
@@ -28,8 +28,7 @@ class DataUnavailableError(MarketDataError):
 
 class MarketDataClient:
     """
-    Simplified client for market data - IB Gateway only.
-    Clean, simple, no fallbacks.
+    Updated client using the new working IB Gateway with official IBAPI
     """
     
     def __init__(self):
@@ -37,7 +36,7 @@ class MarketDataClient:
         
     def get_price(self, symbol: str) -> Dict[str, Union[float, str]]:
         """
-        Get price data for a single symbol from IB Gateway only.
+        Get price data for a single symbol using new IB Gateway client.
         
         Returns:
             dict: {"price": float, "change_percent": float, "timestamp": str}
@@ -55,7 +54,7 @@ class MarketDataClient:
     
     def get_multiple_prices(self, symbols: Union[Dict[str, str], List[str]]) -> Dict[str, str]:
         """
-        Get prices for multiple symbols from IB Gateway only.
+        Get prices for multiple symbols using new IB Gateway client.
         
         Args:
             symbols: Dict {label: symbol} or List [symbol1, symbol2, ...]
@@ -72,7 +71,7 @@ class MarketDataClient:
         if self._is_weekend():
             return {label: "Weekend" for label in symbols}
         
-        # Process through IB Gateway
+        # Process through new IB Gateway
         try:
             symbol_list = list(symbols.values())
             ib_results = self.ib_manager.get_multiple_prices(symbol_list)
@@ -127,20 +126,23 @@ class MarketDataClient:
     
     def get_news(self, ticker: str, start_date: str, end_date: str) -> List[Dict]:
         """
-        Get news for a ticker from IB Gateway only.
+        Get news for a ticker (placeholder - would need historical data access)
         
         Returns:
             list: [{"headline": str, "source": str, "date": str, "url": str}, ...]
         """
         try:
-            return self._get_ib_news(ticker, start_date, end_date)
+            # News functionality would require historical data access
+            # For now, return empty list
+            logger.warning(f"News not available without historical data access")
+            return []
         except Exception as e:
-            logger.error(f"IB news failed for {ticker}: {e}")
+            logger.error(f"News failed for {ticker}: {e}")
             return []
     
     def get_top_movers(self, limit: int = 5, include_extended: bool = False) -> Dict[str, List]:
         """
-        Get top market movers from IB Gateway only.
+        Get top market movers using new IB Gateway client.
         
         Returns:
             dict: {
@@ -154,13 +156,14 @@ class MarketDataClient:
         symbols = list(TICKER_INFO.keys())[:20]  # Limit for performance
         
         try:
-            # Use batch pricing
+            # Use batch pricing with new client
             price_results = self.ib_manager.get_multiple_prices(symbols)
             
             # Convert to tuple format
             data = [
                 (symbol, price_data.price, price_data.change_percent)
                 for symbol, price_data in price_results.items()
+                if price_data.change_percent != 0  # Filter out zero changes
             ]
             
             movers = {
@@ -169,8 +172,8 @@ class MarketDataClient:
             }
             
             if include_extended:
-                # Extended hours placeholder
-                logger.warning("Extended hours data not implemented")
+                # Extended hours not available with current setup
+                logger.warning("Extended hours data not available with current setup")
                 movers["pre_market"] = []
                 movers["post_market"] = []
             
@@ -179,35 +182,6 @@ class MarketDataClient:
         except Exception as e:
             logger.error(f"Error getting top movers: {e}")
             return {"top_gainers": [], "top_losers": [], "pre_market": [], "post_market": []}
-    
-    def _get_ib_news(self, ticker: str, start_date: str, end_date: str) -> List[Dict]:
-        """Get news from IB Gateway"""
-        with self.ib_manager.get_client() as ib:
-            try:
-                contract = self.ib_manager.parse_symbol(ticker)
-                
-                news_articles = ib.reqHistoricalNews(
-                    conId=getattr(contract, 'conId', 0),
-                    providerCodes="BRFG+DJNL+BRFUPDN",
-                    startDateTime=start_date + " 00:00:00",
-                    endDateTime=end_date + " 23:59:59",
-                    totalResults=10
-                )
-                
-                if news_articles:
-                    return [
-                        {
-                            "headline": article.headline,
-                            "source": article.providerCode,
-                            "date": article.time,
-                            "url": ""
-                        }
-                        for article in news_articles
-                    ]
-            except Exception as e:
-                logger.warning(f"IB news error for {ticker}: {e}")
-        
-        return []
     
     def _format_price_display(self, price: float, change_pct: float, symbol: str) -> str:
         """Format price for display based on asset type"""
@@ -224,7 +198,7 @@ class MarketDataClient:
         return datetime.utcnow().weekday() >= 5
     
     def health_check(self) -> Dict[str, bool]:
-        """Check health of IB Gateway only"""
+        """Check health of IB Gateway"""
         health = {}
         
         # IB Gateway
@@ -235,6 +209,44 @@ class MarketDataClient:
             health['ib_gateway'] = False
         
         return health
+    
+    def test_live_connection(self) -> Dict[str, any]:
+        """Test live connection with sample symbols"""
+        test_results = {
+            "connection_status": False,
+            "test_symbols": {},
+            "errors": []
+        }
+        
+        try:
+            # Test connection
+            health = self.health_check()
+            test_results["connection_status"] = health.get('ib_gateway', False)
+            
+            if test_results["connection_status"]:
+                # Test a few common symbols
+                test_symbols = ["AAPL", "ES-FUT-USD", "MSFT"]
+                
+                for symbol in test_symbols:
+                    try:
+                        start_time = time.time()
+                        price_data = self.get_price(symbol)
+                        elapsed = time.time() - start_time
+                        
+                        test_results["test_symbols"][symbol] = {
+                            "price": price_data["price"],
+                            "change_percent": price_data["change_percent"],
+                            "response_time": round(elapsed, 2)
+                        }
+                    except Exception as e:
+                        test_results["errors"].append(f"{symbol}: {str(e)}")
+            else:
+                test_results["errors"].append("IB Gateway connection failed")
+                
+        except Exception as e:
+            test_results["errors"].append(f"Connection test failed: {str(e)}")
+        
+        return test_results
 
 # Global instance for easy access
 _market_client = None
@@ -246,9 +258,9 @@ def get_market_client() -> MarketDataClient:
         _market_client = MarketDataClient()
     return _market_client
 
-# Clean, descriptive function names
+# Clean, descriptive function names (keeping API compatibility)
 def fetch_last_price(symbol: str) -> dict:
-    """Fetch latest price data from IB Gateway only"""
+    """Fetch latest price data using new IB Gateway client"""
     return get_market_client().get_price(symbol)
 
 def get_price_data(symbol: str) -> dict:
@@ -260,5 +272,10 @@ def get_top_movers_from_constituents(limit=5, include_extended=False):
     return get_market_client().get_top_movers(limit, include_extended)
 
 def fetch_stock_news(ticker: str, start_date: str, end_date: str):
-    """Fetch news for a ticker"""
+    """Fetch news for a ticker (placeholder)"""
     return get_market_client().get_news(ticker, start_date, end_date)
+
+def test_live_market_data():
+    """Test function for live market data"""
+    client = get_market_client()
+    return client.test_live_connection()

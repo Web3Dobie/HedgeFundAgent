@@ -80,5 +80,5 @@ CONTAINER_NAME = os.getenv("AZURE_BRIEFINGS_CONTAINER_NAME")
 
 # IB Gateway Settings
 IB_GATEWAY_HOST = os.getenv("IB_GATEWAY_HOST", "10.0.0.6")
-IB_GATEWAY_PORT = int(os.getenv("IB_GATEWAY_PORT", "7497"))
+IB_GATEWAY_PORT = int(os.getenv("IB_GATEWAY_PORT", "4001"))
 IB_MAX_CLIENTS = int(os.getenv("IB_MAX_CLIENTS", "5"))

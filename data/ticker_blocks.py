@@ -23,12 +23,12 @@ US_EQUITY = {
 }
 
 FX_PAIRS = {
-    "USD/JPY": "USD.JPY-CASH-USD",      # USD/JPY spot
-    "EUR/USD": "EUR.USD-CASH-USD",      # EUR/USD spot
-    "GBP/USD": "GBP.USD-CASH-USD",      # GBP/USD spot
-    "USD/CHF": "USD.CHF-CASH-USD",      # USD/CHF spot
-    "AUD/USD": "AUD.USD-CASH-USD",      # AUD/USD spot
-    "USD/CAD": "USD.CAD-CASH-USD",      # USD/CAD spot
+    "USD/JPY": "USDJPY-CASH-USD",      # USD/JPY spot
+    "EUR/USD": "EURUSD-CASH-USD",      # EUR/USD spot
+    "GBP/USD": "GBPUSD-CASH-USD",      # GBP/USD spot
+    "USD/CHF": "USDCHF-CASH-USD",      # USD/CHF spot
+    "AUD/USD": "AUDUSD-CASH-USD",      # AUD/USD spot
+    "USD/CAD": "USDCAD-CASH-USD",      # USD/CAD spot
 }
 
 COMMODITIES = {
