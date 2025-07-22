@@ -82,3 +82,20 @@ CONTAINER_NAME = os.getenv("AZURE_BRIEFINGS_CONTAINER_NAME")
 IB_GATEWAY_HOST = os.getenv("IB_GATEWAY_HOST", "10.0.0.6")
 IB_GATEWAY_PORT = int(os.getenv("IB_GATEWAY_PORT", "4001"))
 IB_MAX_CLIENTS = int(os.getenv("IB_MAX_CLIENTS", "5"))
+
+# NEW: C# REST API Configuration  
+# Both Python and C# API are on 10.0.0.5, use localhost for best performance
+CSHARP_API_URL = os.getenv("CSHARP_API_URL", "http://localhost:5090")
+CSHARP_API_TIMEOUT = int(os.getenv("CSHARP_API_TIMEOUT", "30"))
+
+# Optional: API Authentication (if you add it later)
+CSHARP_API_KEY = os.getenv("CSHARP_API_KEY", "")
+CSHARP_API_USERNAME = os.getenv("CSHARP_API_USERNAME", "")
+CSHARP_API_PASSWORD = os.getenv("CSHARP_API_PASSWORD", "")
+
+# Export the new config values
+__all__ = [
+    'IB_GATEWAY_HOST', 'IB_GATEWAY_PORT', 'IB_MAX_CLIENTS',
+    'CSHARP_API_URL', 'CSHARP_API_TIMEOUT',
+    'CSHARP_API_KEY', 'CSHARP_API_USERNAME', 'CSHARP_API_PASSWORD'
+]

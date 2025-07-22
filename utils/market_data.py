@@ -9,7 +9,7 @@ import time
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Union
 
-from .ib_gateway_client import get_ib_manager, PriceData, IBGatewayManager
+from .csharp_rest_client import get_rest_client, RestApiMarketDataClient, PriceData
 from .fetch_token_data import get_top_tokens_data
 
 logger = logging.getLogger(__name__)
@@ -32,7 +32,7 @@ class MarketDataClient:
     """
     
     def __init__(self):
-        self.ib_manager = get_ib_manager()
+        self.rest_client = get_rest_client()
         
     def get_price(self, symbol: str) -> Dict[str, Union[float, str]]:
         """
@@ -42,11 +42,11 @@ class MarketDataClient:
             dict: {"price": float, "change_percent": float, "timestamp": str}
         """
         try:
-            price_data = self.ib_manager.get_price_data(symbol)
+            price_data = self.rest_client.get_price(symbol)
             return {
-                "price": price_data.price,
-                "change_percent": price_data.change_percent,
-                "timestamp": price_data.timestamp
+                "price": price_data["price"],
+                "change_percent": price_data["change_percent"],
+                "timestamp": price_data["timestamp"]
             }
         except Exception as e:
             logger.warning(f"IB Gateway failed for {symbol}: {e}")
@@ -74,14 +74,14 @@ class MarketDataClient:
         # Process through new IB Gateway
         try:
             symbol_list = list(symbols.values())
-            ib_results = self.ib_manager.get_multiple_prices(symbol_list)
+            ib_results = self.rest_client.get_multiple_prices(symbol_list)
             
             for label, symbol in symbols.items():
                 if symbol in ib_results:
                     price_data = ib_results[symbol]
                     results[label] = self._format_price_display(
-                        price_data.price, 
-                        price_data.change_percent, 
+                        price_data["price"], 
+                        price_data["change_percent"], 
                         symbol
                     )
                 else:
@@ -157,13 +157,13 @@ class MarketDataClient:
         
         try:
             # Use batch pricing with new client
-            price_results = self.ib_manager.get_multiple_prices(symbols)
+            price_results = self.rest_client.get_multiple_prices(symbols)
             
             # Convert to tuple format
             data = [
-                (symbol, price_data.price, price_data.change_percent)
+                (symbol, price_data["price"], price_data["change_percent"])
                 for symbol, price_data in price_results.items()
-                if price_data.change_percent != 0  # Filter out zero changes
+                if price_data["change_percent"] != 0  # Filter out zero changes
             ]
             
             movers = {
@@ -198,18 +198,16 @@ class MarketDataClient:
         return datetime.utcnow().weekday() >= 5
     
     def health_check(self) -> Dict[str, bool]:
-        """Check health of IB Gateway"""
+        """Check health of REST API connection"""
         health = {}
         
-        # IB Gateway
+        # REST API health
         try:
-            with self.ib_manager.get_client() as ib:
-                health['ib_gateway'] = ib.isConnected()
+            health['ib_gateway'] = self.rest_client.is_connected()
         except:
             health['ib_gateway'] = False
         
         return health
-    
     def test_live_connection(self) -> Dict[str, any]:
         """Test live connection with sample symbols"""
         test_results = {
