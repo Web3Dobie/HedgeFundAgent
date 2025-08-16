@@ -37,66 +37,71 @@ class IGRateLimitError(IGMarketDataError):
     """IG API rate limit errors"""
     pass
 
-# UPDATED IG EPIC Symbol Mapping - Based on working test results
+# CFD/SPREAD BETTING IG EPIC Symbol Mapping - Correct format for your account
 IG_EPIC_MAPPING = {
-    # US Equity Indices (WORKING PERFECTLY)
-    "^GSPC": "IX.D.SPTRD.DAILY.IP",      # ✅ S&P 500 - Confirmed working
-    "^DJI": "IX.D.DOW.DAILY.IP",         # ✅ Dow Jones - Working (occasional 403)
-    "^IXIC": "IX.D.NASDAQ.DAILY.IP",     # NASDAQ - test alternative if needed
-    "^RUT": "IX.D.RUSSELL.DAILY.IP",     # Russell 2000
+    # US Equity Indices - CFD FORMAT
+    "^GSPC": "IX.D.SPTRD.CFD.IP",        # S&P 500 CFD
+    "^DJI": "IX.D.DOW.CFD.IP",           # Dow Jones CFD  
+    "^IXIC": "IX.D.NASDAQ.CFD.IP",       # NASDAQ CFD
+    "^RUT": "IX.D.RUSSELL.CFD.IP",       # Russell 2000 CFD
     
-    # European Indices (WORKING PERFECTLY)
-    "^FTSE": "IX.D.FTSE.DAILY.IP",       # ✅ FTSE 100 - Confirmed working
-    "^GDAXI": "IX.D.DAX.DAILY.IP",       # ✅ DAX - Confirmed working  
-    "^FCHI": "IX.D.CAC.DAILY.IP",        # CAC 40
-    "^STOXX50E": "IX.D.STOXX50.DAILY.IP", # Euro Stoxx 50
+    # European Indices - CFD FORMAT
+    "^FTSE": "IX.D.FTSE.CFD.IP",         # ✅ FTSE 100 CFD - Your example
+    "^GDAXI": "IX.D.DAX.CFD.IP",         # DAX CFD
+    "^FCHI": "IX.D.CAC.CFD.IP",          # CAC 40 CFD
+    "^STOXX50E": "IX.D.STOXX50.CFD.IP",  # Euro Stoxx 50 CFD
     
-    # Asian Indices (WORKING)
-    "^N225": "IX.D.NIKKEI.DAILY.IP",     # ✅ Nikkei - Confirmed working
-    "^HSI": "IX.D.HK33.DAILY.IP",        # Hang Seng
-    "^KS11": "IX.D.KOREA200.DAILY.IP",   # KOSPI
+    # Asian Indices - CFD FORMAT
+    "^N225": "IX.D.NIKKEI.CFD.IP",       # Nikkei 225 CFD
+    "^HSI": "IX.D.HK33.CFD.IP",          # Hang Seng CFD
+    "^KS11": "IX.D.KOREA200.CFD.IP",     # KOSPI CFD
     
-    # Major Forex Pairs (WORKING - with price normalization)
-    "EURUSD=X": "CS.D.EURUSD.MINI.IP",   # ✅ EUR/USD - needs price normalization
-    "GBPUSD=X": "CS.D.GBPUSD.MINI.IP",   # ✅ GBP/USD - needs price normalization
-    "USDJPY=X": "CS.D.USDJPY.MINI.IP",   # ✅ USD/JPY - needs price normalization
-    "USDCHF=X": "CS.D.USDCHF.MINI.IP",   # ✅ USD/CHF - needs price normalization
-    "AUDUSD=X": "CS.D.AUDUSD.MINI.IP",   # ✅ AUD/USD - needs price normalization
-    "USDCAD=X": "CS.D.USDCAD.MINI.IP",   # ✅ USD/CAD - needs price normalization
+    # Major Forex Pairs - CFD FORMAT (divide by 10,000)
+    "EURUSD=X": "CS.D.EURUSD.CFD.IP",    # EUR/USD CFD - divide by 10,000
+    "GBPUSD=X": "CS.D.GBPUSD.CFD.IP",    # GBP/USD CFD - divide by 10,000
+    "USDJPY=X": "CS.D.USDJPY.CFD.IP",    # USD/JPY CFD - divide by 100
+    "USDCHF=X": "CS.D.USDCHF.CFD.IP",    # USD/CHF CFD - divide by 10,000
+    "AUDUSD=X": "CS.D.AUDUSD.CFD.IP",    # AUD/USD CFD - divide by 10,000
+    "USDCAD=X": "CS.D.USDCAD.CFD.IP",    # USD/CAD CFD - divide by 10,000
     
-    # Commodities (Test alternatives for unavailable ones)
-    "GC=F": "CC.D.GC.MINI.IP",           # Gold - test alternatives if 404
-    "SI=F": "CC.D.SI.MINI.IP",           # Silver
-    "CL=F": "CC.D.CL.MINI.IP",           # Crude Oil - test alternatives if 404
-    "NG=F": "CC.D.NG.MINI.IP",           # Natural Gas
-    "HG=F": "CC.D.COPPER.MINI.IP",       # Copper
+    # Commodities - CFD FORMAT
+    "GC=F": "IX.D.GOLD.CFD.IP",          # Gold CFD
+    "SI=F": "IX.D.SILVER.CFD.IP",        # Silver CFD
+    "CL=F": "IX.D.OIL.CFD.IP",           # Crude Oil CFD
+    "NG=F": "IX.D.NATGAS.CFD.IP",        # Natural Gas CFD
+    "HG=F": "IX.D.COPPER.CFD.IP",        # Copper CFD
     
-    # Crypto (WORKING)
-    "BTC-USD": "CS.D.BITCOIN.CFD.IP",    # ✅ Bitcoin - Confirmed working
-    "ETH-USD": "CS.D.ETHEREUM.CFD.IP",   # Ethereum - test if available
+    # Crypto - CFD FORMAT
+    "BTC-USD": "CS.D.BITCOIN.CFD.IP",    # Bitcoin CFD
+    "ETH-USD": "CS.D.ETHEREUM.CFD.IP",   # Ethereum CFD
 }
 
-# Alternative EPICs to try if primary ones fail
+# CFD/Spread Betting Alternative EPICs to try if primary ones fail
 EPIC_ALTERNATIVES = {
     "^IXIC": [
-        "IX.D.NASDAQ.DAILY.IP",
-        "IX.D.NASDAQ.CFD.IP", 
-        "IX.D.US100.DAILY.IP"
+        "IX.D.NASDAQ.CFD.IP",
+        "IX.D.US100.CFD.IP",
+        "IX.D.USTEC.CFD.IP"
     ],
     "GC=F": [
-        "CC.D.GC.MINI.IP",
-        "CC.D.GOLD.DAILY.IP",
-        "IX.D.GOLD.DAILY.IP"
+        "IX.D.GOLD.CFD.IP",
+        "CC.D.GOLD.CFD.IP", 
+        "IX.D.XAUUSD.CFD.IP"
     ],
     "CL=F": [
-        "CC.D.CL.MINI.IP", 
-        "CC.D.OIL.DAILY.IP",
-        "IX.D.OIL.DAILY.IP"
+        "IX.D.OIL.CFD.IP",
+        "CC.D.BRENT.CFD.IP",
+        "IX.D.CRUDE.CFD.IP"
     ],
     "EURUSD=X": [
-        "CS.D.EURUSD.MINI.IP",
-        "CS.D.EURUSD.TODAY.IP",
-        "CS.D.EURUSD.CFD.IP"
+        "CS.D.EURUSD.CFD.IP",
+        "CS.D.EURUSD.MINI.IP",     # Your current working one
+        "IX.D.EURUSD.CFD.IP"
+    ],
+    "^GSPC": [
+        "IX.D.SPTRD.CFD.IP", 
+        "IX.D.SPTRD.DAILY.IP",     # Your current working one
+        "IX.D.US500.CFD.IP"
     ]
 }
 
@@ -205,32 +210,39 @@ class IGMarketDataClient:
     
     def _normalize_ig_price(self, price: float, epic: str, symbol: str) -> float:
         """
-        Normalize IG Index prices to standard format
-        Some IG EPICs return prices in different scales
+        Normalize IG CFD/Spread Betting prices to standard format
+        CFD/Spread betting accounts use specific scaling:
+        - Forex: divide by 10,000 (except JPY pairs: divide by 100)
+        - Indices & Commodities: usually correct as-is
         """
         
-        # Forex pairs - check if price needs scaling
-        if "CS.D." in epic and any(fx in symbol for fx in ["EURUSD", "GBPUSD", "USDCHF", "AUDUSD", "USDCAD"]):
-            # If price > 100, it's likely in points (10,000 scale)
-            if price > 100:
+        # Forex CFD prices - divide by 10,000 for major pairs
+        if "CS.D." in epic and ".CFD.IP" in epic:
+            if "USDJPY" in symbol:
+                # USD/JPY special case: divide by 100
+                normalized_price = price / 100
+                logger.debug(f"Normalized USD/JPY CFD: {price} -> {normalized_price}")
+                return normalized_price
+            else:
+                # All other forex pairs: divide by 10,000
                 normalized_price = price / 10000
-                logger.debug(f"Normalized forex price {symbol}: {price} -> {normalized_price}")
+                logger.debug(f"Normalized forex CFD {symbol}: {price} -> {normalized_price}")
                 return normalized_price
         
-        # USD/JPY uses different scale (100 scale)
-        if "USDJPY" in symbol and price > 1000:
-            normalized_price = price / 100
-            logger.debug(f"Normalized JPY price {symbol}: {price} -> {normalized_price}")
-            return normalized_price
+        # Index CFDs - usually correct as-is 
+        if "IX.D." in epic and ".CFD.IP" in epic:
+            # Most index CFDs should be correct without scaling
+            return price
         
-        # Indices in points format
-        if "IX.D." in epic and price > 100000:
-            # Some indices might be in points
-            normalized_price = price / 100
-            logger.debug(f"Normalized index price {symbol}: {price} -> {normalized_price}")
-            return normalized_price
+        # Commodity CFDs - usually correct as-is
+        if any(commodity in epic for commodity in ["GOLD", "SILVER", "OIL", "COPPER", "NATGAS"]):
+            return price
         
-        # For other instruments, return as-is
+        # Crypto CFDs - usually correct as-is
+        if any(crypto in epic for crypto in ["BITCOIN", "ETHEREUM"]):
+            return price
+        
+        # Default: return as-is
         return price
     
     def _symbol_to_epic(self, symbol: str) -> Optional[str]:
