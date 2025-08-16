@@ -1,0 +1,55 @@
+using Microsoft.AspNetCore.Mvc;
+using IBGatewayService.Services;
+
+namespace IBGatewayService.Controllers
+{
+    [ApiController]
+    [Route("api/[controller]")]
+    public class IBGatewayController : ControllerBase
+    {
+        private readonly IBGatewayManager _ibManager;
+
+        public IBGatewayController(IBGatewayManager ibManager)
+        {
+            _ibManager = ibManager;
+        }
+
+        [HttpGet("status")]
+        public IActionResult GetConnectionStatus()
+        {
+            return Ok(new
+            {
+                isConnected = _ibManager.IsConnected,
+                timestamp = DateTime.UtcNow
+            });
+        }
+
+        [HttpPost("disconnect")]
+        public async Task<IActionResult> Disconnect()
+        {
+            try
+            {
+                await _ibManager.DisconnectAsync();
+                return Ok(new { message = "Disconnected successfully" });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { error = ex.Message });
+            }
+        }
+
+        [HttpPost("reconnect")]
+        public async Task<IActionResult> Reconnect()
+        {
+            try
+            {
+                await _ibManager.InitializeAsync();
+                return Ok(new { message = "Reconnected successfully" });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { error = ex.Message });
+            }
+        }
+    }
+}

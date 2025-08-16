@@ -1,0 +1,46 @@
+using Microsoft.AspNetCore.Mvc;
+using IBGatewayService.Services;
+using IBGatewayService.Models;
+
+namespace IBGatewayService.Controllers
+{
+    [ApiController]
+    [Route("api/[controller]")]
+    public class TradingController : ControllerBase
+    {
+        private readonly IBGatewayManager _ibManager;
+
+        public TradingController(IBGatewayManager ibManager)
+        {
+            _ibManager = ibManager;
+        }
+
+        [HttpPost("order")]
+        public async Task<IActionResult> PlaceOrder([FromBody] OrderRequest order)
+        {
+            try
+            {
+                var orderId = await _ibManager.PlaceOrderAsync(order);
+                return Ok(new { 
+                    orderId, 
+                    message = "Order placed successfully",
+                    timestamp = DateTime.UtcNow 
+                });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { error = ex.Message });
+            }
+        }
+
+        [HttpGet("health")]
+        public IActionResult GetTradingStatus()
+        {
+            return Ok(new { 
+                isConnected = _ibManager.IsConnected,
+                timestamp = DateTime.UtcNow,
+                status = _ibManager.IsConnected ? "Ready for trading" : "Disconnected"
+            });
+        }
+    }
+}

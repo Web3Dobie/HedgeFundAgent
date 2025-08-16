@@ -21,6 +21,7 @@ namespace IBGatewayService.Services
         // Connection state
         private bool _isConnected = false;
         private int _nextOrderId = -1;
+        private bool _delayedDataInitialized = false;
         
         // Data storage - using ConcurrentDictionary for thread safety
         private readonly ConcurrentDictionary<int, MarketDataResponse> _marketDataResponses;
@@ -90,6 +91,9 @@ namespace IBGatewayService.Services
                     await Task.Delay(100);
                 }
                 
+                // 🔥 INITIALIZE DELAYED DATA MODE IMMEDIATELY AFTER CONNECTION 🔥
+                await InitializeDelayedDataMode();
+                
                 _logger.LogInformation($"Connected successfully to {configHost}:{configPort}. Next Order ID: {_nextOrderId}");
                 return _isConnected;
             }
@@ -100,12 +104,39 @@ namespace IBGatewayService.Services
             }
         }
         
+        /// <summary>
+        /// Initialize delayed data mode immediately after connection
+        /// This ensures ALL subsequent requests use delayed data
+        /// </summary>
+        private async Task InitializeDelayedDataMode()
+        {
+            try
+            {
+                _logger.LogInformation("🔥 Initializing DELAYED data mode globally...");
+                
+                // Set delayed market data type GLOBALLY for this connection
+                _clientSocket.reqMarketDataType(3); // 3 = Delayed data
+                
+                // Wait a moment for the setting to take effect
+                await Task.Delay(500);
+                
+                _delayedDataInitialized = true;
+                _logger.LogInformation("✅ Delayed data mode initialized successfully");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "❌ Failed to initialize delayed data mode");
+                _delayedDataInitialized = false;
+            }
+        }
+        
         public void Disconnect()
         {
             try
             {
                 _clientSocket?.eDisconnect();
                 _isConnected = false;
+                _delayedDataInitialized = false;
                 _logger.LogInformation("Disconnected from IB Gateway");
             }
             catch (Exception ex)
@@ -235,9 +266,24 @@ namespace IBGatewayService.Services
             
             try
             {
-                // Request market data with delayed data type
-                _clientSocket.reqMarketDataType(3); // 3 = Delayed data
+                // 🔥 ENSURE DELAYED DATA MODE IS SET FOR EACH REQUEST 🔥
+                if (!_delayedDataInitialized)
+                {
+                    _logger.LogWarning("⚠️ Delayed data not initialized, setting now...");
+                    _clientSocket.reqMarketDataType(3); // 3 = Delayed data
+                    await Task.Delay(200); // Brief pause for setting to take effect
+                    _delayedDataInitialized = true;
+                }
+                
+                _logger.LogInformation($"🔄 Requesting DELAYED market data for {contract.Symbol} (Request ID: {requestId})");
+                
+                // Double-check: Set delayed data type right before the request
+                _clientSocket.reqMarketDataType(3); // 3 = Delayed data - be explicit every time
+                
+                // Request market data with empty generic ticks (use defaults)
                 _clientSocket.reqMktData(requestId, contract, "", false, false, new List<TagValue>());
+                
+                _logger.LogInformation($"📡 Market data request sent for {contract.Symbol} - waiting for delayed data...");
                 
                 // Wait for response with timeout
                 using (var cts = new CancellationTokenSource(TimeSpan.FromSeconds(timeoutSeconds)))
@@ -247,22 +293,34 @@ namespace IBGatewayService.Services
                     
                     if (completedTask == timeoutTask)
                     {
-                        throw new TimeoutException($"Market data request timed out for request ID {requestId}");
+                        _logger.LogError($"❌ Market data request TIMED OUT for {contract.Symbol} (Request ID: {requestId})");
+                        throw new TimeoutException($"Market data request timed out for {contract.Symbol} (Request ID: {requestId})");
                     }
                     
                     cts.Cancel(); // Cancel the timeout task
-                    return await tcs.Task;
+                    var result = await tcs.Task;
+                    _logger.LogInformation($"✅ Market data received for {contract.Symbol}: Price={result.CurrentPrice}");
+                    return result;
                 }
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, $"Error getting market data for request ID {requestId}");
+                _logger.LogError(ex, $"❌ Error getting market data for {contract.Symbol} (Request ID: {requestId})");
                 throw;
             }
             finally
             {
                 // Cleanup
-                _clientSocket.cancelMktData(requestId);
+                try
+                {
+                    _clientSocket.cancelMktData(requestId);
+                    _logger.LogDebug($"🧹 Cancelled market data subscription for Request ID: {requestId}");
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, $"Warning: Could not cancel market data for Request ID: {requestId}");
+                }
+                
                 _pendingRequests.TryRemove(requestId, out _);
                 _marketDataResponses.TryRemove(requestId, out _);
             }
@@ -283,24 +341,44 @@ namespace IBGatewayService.Services
         public void connectAck()
         {
             _isConnected = true;
-            _logger.LogInformation("Connection acknowledged");
+            _logger.LogInformation("✅ Connection acknowledged by IB Gateway");
         }
         
         public void connectionClosed()
         {
             _isConnected = false;
-            _logger.LogInformation("Connection closed");
+            _delayedDataInitialized = false;
+            _logger.LogInformation("🔌 Connection closed by IB Gateway");
         }
         
         public void nextValidId(int orderId)
         {
             _nextOrderId = orderId;
-            _logger.LogDebug($"Next valid order ID: {orderId}");
+            _logger.LogInformation($"📋 Next valid order ID received: {orderId}");
         }
 
         #endregion
 
         #region EWrapper Implementation - Market Data Events
+        
+        public void marketDataType(int reqId, int marketDataType)
+        {
+            string dataTypeDescription = marketDataType switch
+            {
+                1 => "Real-Time",
+                2 => "Frozen",
+                3 => "Delayed",
+                4 => "Delayed-Frozen",
+                _ => $"Unknown ({marketDataType})"
+            };
+            
+            _logger.LogInformation($"📊 Market Data Type for Request {reqId}: {dataTypeDescription} (Type: {marketDataType})");
+            
+            if (marketDataType != 3)
+            {
+                _logger.LogWarning($"⚠️ Expected delayed data (3) but got type {marketDataType} for request {reqId}");
+            }
+        }
         
         public void tickPrice(int tickerId, int field, double price, TickAttrib attribs)
         {
@@ -308,62 +386,62 @@ namespace IBGatewayService.Services
             {
                 response.LastUpdate = DateTime.UtcNow;
                 
-                _logger.LogInformation($"📊 Tick Price: tickerId={tickerId}, field={field}, price={price}, attribs={attribs}");
+                _logger.LogInformation($"📊 Tick Price: tickerId={tickerId}, field={field}, price={price:F2}");
                 
                 switch (field)
                 {
                     case 1: // BID
                         response.BidPrice = price;
-                        _logger.LogInformation($"   → Set BID to {price}");
+                        _logger.LogInformation($"   → Set BID to {price:F2}");
                         break;
                     case 2: // ASK
                         response.AskPrice = price;
-                        _logger.LogInformation($"   → Set ASK to {price}");
+                        _logger.LogInformation($"   → Set ASK to {price:F2}");
                         break;
                     case 4: // LAST
                         response.LastPrice = price;
-                        _logger.LogInformation($"   → Set LAST to {price}");
+                        _logger.LogInformation($"   → Set LAST to {price:F2}");
                         break;
                     case 6: // HIGH
-                        _logger.LogInformation($"   → HIGH: {price}");
+                        _logger.LogInformation($"   → HIGH: {price:F2}");
                         break;
                     case 7: // LOW
-                        _logger.LogInformation($"   → LOW: {price}");
+                        _logger.LogInformation($"   → LOW: {price:F2}");
                         break;
                     case 9: // CLOSE
                         response.ClosePrice = price;
-                        _logger.LogInformation($"   → Set CLOSE to {price}");
+                        _logger.LogInformation($"   → Set CLOSE to {price:F2}");
                         break;
                     case 14: // OPEN
-                        _logger.LogInformation($"   → OPEN: {price}");
+                        _logger.LogInformation($"   → OPEN: {price:F2}");
                         break;
                     case 66: // DELAYED_BID
                         response.BidPrice = price;
-                        _logger.LogInformation($"   → Set DELAYED BID to {price}");
+                        _logger.LogInformation($"   → Set DELAYED BID to {price:F2} ✅");
                         break;
                     case 67: // DELAYED_ASK
                         response.AskPrice = price;
-                        _logger.LogInformation($"   → Set DELAYED ASK to {price}");
+                        _logger.LogInformation($"   → Set DELAYED ASK to {price:F2} ✅");
                         break;
                     case 68: // DELAYED_LAST
                         response.LastPrice = price;
-                        _logger.LogInformation($"   → Set DELAYED LAST to {price}");
+                        _logger.LogInformation($"   → Set DELAYED LAST to {price:F2} ✅");
                         break;
                     case 72: // DELAYED_HIGH
-                        _logger.LogInformation($"   → DELAYED HIGH: {price}");
+                        _logger.LogInformation($"   → DELAYED HIGH: {price:F2} ✅");
                         break;
                     case 73: // DELAYED_LOW  
-                        _logger.LogInformation($"   → DELAYED LOW: {price}");
+                        _logger.LogInformation($"   → DELAYED LOW: {price:F2} ✅");
                         break;
                     case 75: // DELAYED_CLOSE
                         response.ClosePrice = price;
-                        _logger.LogInformation($"   → Set DELAYED CLOSE to {price}");
+                        _logger.LogInformation($"   → Set DELAYED CLOSE to {price:F2} ✅");
                         break;
                     case 76: // DELAYED_OPEN
-                        _logger.LogInformation($"   → DELAYED OPEN: {price}");
+                        _logger.LogInformation($"   → DELAYED OPEN: {price:F2} ✅");
                         break;
                     default:
-                        _logger.LogInformation($"   → UNKNOWN FIELD {field}: {price}");
+                        _logger.LogInformation($"   → UNKNOWN FIELD {field}: {price:F2}");
                         break;
                 }
                 
@@ -375,7 +453,7 @@ namespace IBGatewayService.Services
         {
             if (_marketDataResponses.TryGetValue(tickerId, out var response))
             {
-                _logger.LogDebug($"Received tick size for {tickerId}: field={field}, size={size}");
+                _logger.LogDebug($"📊 Tick Size: tickerId={tickerId}, field={field}, size={size}");
                 
                 switch (field)
                 {
@@ -393,12 +471,15 @@ namespace IBGatewayService.Services
                         break;
                     case 69: // DELAYED_BID_SIZE
                         response.BidSize = size;
+                        _logger.LogDebug($"   → DELAYED BID SIZE: {size} ✅");
                         break;
                     case 70: // DELAYED_ASK_SIZE
                         response.AskSize = size;
+                        _logger.LogDebug($"   → DELAYED ASK SIZE: {size} ✅");
                         break;
                     case 71: // DELAYED_LAST_SIZE
                         response.LastSize = size;
+                        _logger.LogDebug($"   → DELAYED LAST SIZE: {size} ✅");
                         break;
                 }
                 
@@ -410,8 +491,7 @@ namespace IBGatewayService.Services
         {
             if (_marketDataResponses.TryGetValue(tickerId, out var response))
             {
-                // Handle string data like timestamps, etc.
-                _logger.LogDebug($"Tick string for {tickerId}: Type {tickType}, Value {value}");
+                _logger.LogDebug($"📊 Tick String: tickerId={tickerId}, Type {tickType}, Value {value}");
             }
         }
         
@@ -419,8 +499,7 @@ namespace IBGatewayService.Services
         {
             if (_marketDataResponses.TryGetValue(tickerId, out var response))
             {
-                // Handle generic tick data
-                _logger.LogDebug($"Tick generic for {tickerId}: Type {tickType}, Value {value}");
+                _logger.LogDebug($"📊 Tick Generic: tickerId={tickerId}, Type {tickType}, Value {value}");
             }
         }
         
@@ -429,13 +508,13 @@ namespace IBGatewayService.Services
             if (_marketDataResponses.TryGetValue(tickerId, out var response) &&
                 _pendingRequests.TryGetValue(tickerId, out var tcs))
             {
-                _logger.LogDebug($"Checking data completeness for {tickerId}: Last={response.LastPrice}, Bid={response.BidPrice}, Ask={response.AskPrice}");
+                _logger.LogDebug($"🔍 Checking data completeness for {tickerId}: Last={response.LastPrice}, Bid={response.BidPrice}, Ask={response.AskPrice}");
                 
                 // Check if we have enough data to complete the request
                 // For delayed data, we need at least one price point
                 if (response.LastPrice > 0 || response.BidPrice > 0 || response.AskPrice > 0)
                 {
-                    _logger.LogInformation($"Data complete for {tickerId}: Price={response.CurrentPrice}");
+                    _logger.LogInformation($"✅ Data complete for {tickerId}: Price={response.CurrentPrice:F2}");
                     response.IsComplete = true;
                     tcs.SetResult(response);
                 }
@@ -448,12 +527,12 @@ namespace IBGatewayService.Services
         
         public void error(Exception e)
         {
-            _logger.LogError(e, "IB API Exception");
+            _logger.LogError(e, "❌ IB API Exception");
         }
         
         public void error(string str)
         {
-            _logger.LogError($"IB API Error: {str}");
+            _logger.LogError($"❌ IB API Error: {str}");
         }
         
         public void error(int id, int errorCode, string errorMsg)
@@ -461,11 +540,19 @@ namespace IBGatewayService.Services
             // Some error codes are just informational
             if (errorCode == 2104 || errorCode == 2106 || errorCode == 2158)
             {
-                _logger.LogDebug($"IB Info {errorCode}: {errorMsg}");
+                _logger.LogInformation($"ℹ️ IB Info {errorCode}: {errorMsg}");
                 return;
             }
             
-            _logger.LogError($"IB Error {errorCode} for request {id}: {errorMsg}");
+            // Handle the specific "market data requires subscription" error
+            if (errorCode == 10089)
+            {
+                _logger.LogWarning($"⚠️ IB Error {errorCode} for request {id}: {errorMsg}");
+                _logger.LogInformation($"💡 This usually means delayed data should be available - continuing...");
+                return; // Don't fail the request, delayed data might still come through
+            }
+            
+            _logger.LogError($"❌ IB Error {errorCode} for request {id}: {errorMsg}");
             
             // Complete pending requests with error for connection issues
             if (errorCode >= 504 && errorCode <= 507)
@@ -506,7 +593,6 @@ namespace IBGatewayService.Services
         public void historicalData(int reqId, Bar bar) { }
         public void historicalDataUpdate(int reqId, Bar bar) { }
         public void historicalDataEnd(int reqId, string startDateStr, string endDateStr) { }
-        public void marketDataType(int reqId, int marketDataType) { }
         public void updateMktDepth(int id, int position, int operation, int side, double price, int size) { }
         public void updateMktDepthL2(int id, int position, string marketMaker, int operation, int side, double price, int size, bool isSmartDepth) { }
         public void updateNewsBulletin(int msgId, int msgType, string newsMessage, string originatingExch) { }

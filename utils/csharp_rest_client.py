@@ -184,59 +184,50 @@ class CSharpRestApiClient:
     
     def get_market_data(self, symbol: str) -> PriceData:
         """
-        Get market data for a symbol
+        Get market data for a symbol using the new universal /price/ endpoint
         
         Args:
-            symbol: Stock symbol (e.g., "AAPL", "ES-FUT-USD")
+            symbol: Stock symbol (e.g., "AAPL", "FDAX-FUT-EUR", "ES-FUT-USD")
             
         Returns:
             PriceData object with current market information
         """
         try:
-            # Determine endpoint based on symbol type
-            if '-FUT-' in symbol or symbol.upper().startswith('ES') and len(symbol) <= 4:
-                # Futures endpoint - handle both "ES-FUT-USD" and "ES" formats
-                if '-FUT-' in symbol:
-                    # Extract base symbol (ES from "ES-FUT-USD")
-                    base_symbol = symbol.split('-')[0]
-                else:
-                    base_symbol = symbol
-                
-                # Use current front month as default (you can make this configurable)
-                endpoint = f'/api/marketdata/futures/{base_symbol}?expiry=202509'
-            else:
-                # Stock endpoint
-                endpoint = f'/api/marketdata/stock/{symbol}'
+            # Use the new universal /price/ endpoint that handles all symbol types
+            # including international futures with proper exchange/currency mapping
+            endpoint = f'/api/marketdata/price/{symbol}'
             
+            logger.info(f"📊 Requesting market data: {endpoint}")
             response = self._make_request('GET', endpoint)
             
             # Parse response into PriceData
             if isinstance(response, dict):
-                # Your C# API response format
-                current_price = response.get('currentPrice', response.get('lastPrice', 0))
-                last_price = response.get('lastPrice', current_price)
-                change_percent = response.get('changePercent', 0)  # Already in percentage format
+                # Handle both old and new response formats
+                price = response.get('price', 0)
+                if price == 0:
+                    # Fallback to other price fields
+                    price = response.get('currentPrice', response.get('lastPrice', 0))
                 
-                # Use the most relevant price (currentPrice or lastPrice, whichever is non-zero)
-                if current_price > 0:
-                    price = current_price
-                elif last_price > 0:
-                    price = last_price
-                else:
-                    # Fallback to bidPrice if available
-                    price = response.get('bidPrice', 0)
+                change_percent = response.get('change_percent', response.get('changePercent', 0))
+                
+                # Extract currency and exchange info from new endpoint
+                currency = response.get('currency', 'USD')
+                exchange = response.get('exchange', 'SMART')
+                
+                logger.info(f"✅ {symbol}: ${price} ({change_percent:+.2f}%) [{currency}@{exchange}]")
                 
                 return PriceData(
                     symbol=symbol,
                     price=float(price),
                     change_percent=round(change_percent, 2),
-                    timestamp=response.get('lastUpdate', datetime.now().isoformat()),
+                    timestamp=response.get('timestamp', response.get('lastUpdate', datetime.now().isoformat())),
+                    currency=currency,
                     volume=response.get('volume'),
-                    bid=response.get('bidPrice') if response.get('bidPrice', 0) > 0 else None,
-                    ask=response.get('askPrice') if response.get('askPrice', 0) > 0 else None,
-                    last=response.get('lastPrice') if response.get('lastPrice', 0) > 0 else None,
-                    bid_size=response.get('bidSize') if response.get('bidSize', 0) > 0 else None,
-                    ask_size=response.get('askSize') if response.get('askSize', 0) > 0 else None
+                    bid=response.get('bid', response.get('bidPrice')) if response.get('bid', response.get('bidPrice', 0)) > 0 else None,
+                    ask=response.get('ask', response.get('askPrice')) if response.get('ask', response.get('askPrice', 0)) > 0 else None,
+                    last=response.get('last', response.get('lastPrice')) if response.get('last', response.get('lastPrice', 0)) > 0 else None,
+                    bid_size=response.get('bid_size', response.get('bidSize')) if response.get('bid_size', response.get('bidSize', 0)) > 0 else None,
+                    ask_size=response.get('ask_size', response.get('askSize')) if response.get('ask_size', response.get('askSize', 0)) > 0 else None
                 )
             
             else:
@@ -357,7 +348,7 @@ class RestApiMarketDataClient:
         Get current price for a symbol (compatible with old interface)
         
         Args:
-            symbol: Symbol to fetch (e.g., "AAPL", "ES-FUT-USD")
+            symbol: Symbol to fetch (e.g., "AAPL", "FDAX-FUT-EUR", "ES-FUT-USD")
             
         Returns:
             Dictionary with price data (compatible with old format)
@@ -438,8 +429,8 @@ class RestApiMarketDataClient:
                 if self.connect():
                     test_results["ib_connected"] = True
                     
-                    # Test a few symbols
-                    test_symbols = ["AAPL", "ES-FUT-USD", "EURUSD-CASH-USD"]
+                    # Test a mix of US and international symbols
+                    test_symbols = ["AAPL", "ES-FUT-USD", "FDAX-FUT-EUR", "HSI-FUT-HKD"]
                     
                     for symbol in test_symbols:
                         try:
@@ -451,6 +442,7 @@ class RestApiMarketDataClient:
                                 "success": True,
                                 "price": data["price"],
                                 "change_percent": data["change_percent"],
+                                "currency": data.get("currency", "USD"),
                                 "response_time": round(elapsed, 2)
                             }
                         except Exception as e:
@@ -514,7 +506,8 @@ if __name__ == "__main__":
         print("\nSymbol Tests:")
         for symbol, data in results['test_symbols'].items():
             if data['success']:
-                print(f"✅ {symbol}: ${data['price']} ({data['change_percent']:+.2f}%) - {data['response_time']}s")
+                currency = data.get('currency', 'USD')
+                print(f"✅ {symbol}: {currency} {data['price']} ({data['change_percent']:+.2f}%) - {data['response_time']}s")
             else:
                 print(f"❌ {symbol}: {data['error']}")
     

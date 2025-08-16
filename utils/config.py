@@ -99,3 +99,51 @@ __all__ = [
     'CSHARP_API_URL', 'CSHARP_API_TIMEOUT',
     'CSHARP_API_KEY', 'CSHARP_API_USERNAME', 'CSHARP_API_PASSWORD'
 ]
+
+# IG Index API Configuration
+IG_USERNAME = os.getenv('IG_USERNAME')
+IG_PASSWORD = os.getenv('IG_PASSWORD') 
+IG_API_KEY = os.getenv('IG_API_KEY')
+IG_ACC_TYPE = os.getenv('IG_ACC_TYPE', 'LIVE')  # DEMO or LIVE
+IG_ACC_NUMBER = os.getenv('IG_ACC_NUMBER')  # Optional
+
+# IG Index Configuration Validation
+def validate_ig_config():
+    """Validate IG Index configuration"""
+    missing = []
+    
+    if not IG_USERNAME:
+        missing.append('IG_USERNAME')
+    if not IG_PASSWORD:
+        missing.append('IG_PASSWORD')
+    if not IG_API_KEY:
+        missing.append('IG_API_KEY')
+    
+    if missing:
+        print(f"⚠️  Missing IG Index configuration: {', '.join(missing)}")
+        print("Add these to your .env file:")
+        for var in missing:
+            print(f"  {var}=your_value_here")
+        return False
+    
+    print("✅ IG Index configuration validated")
+    return True
+
+# Market Data Source Priority
+MARKET_DATA_SOURCES = {
+    'primary': 'ig_index',
+    'fallback': 'yfinance',
+    'crypto': 'coingecko'
+}
+
+# Rate Limiting Configuration
+RATE_LIMITS = {
+    'ig_index': {
+        'requests_per_minute': 35,  # Conservative limit (IG allows 40)
+        'min_interval_seconds': 1.5
+    },
+    'yfinance': {
+        'requests_per_minute': 60,
+        'min_interval_seconds': 1.0
+    }
+}
