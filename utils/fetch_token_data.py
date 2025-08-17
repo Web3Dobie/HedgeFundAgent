@@ -5,13 +5,24 @@ from data.ticker_blocks import CRYPTO as CRYPTO_TOKENS # Importing CRYPTO tokens
 
 logger = logging.getLogger(__name__)
 
+# COINGECKO-SPECIFIC MAPPING 
+CRYPTO_TOKENS = {
+    # CoinGecko API names (lowercase) -> Display tickers
+    "bitcoin": "BTC",
+    "ethereum": "ETH", 
+    "solana": "SOL",
+    "ripple": "XRP",        # XRP on CoinGecko is "ripple" 
+    "cardano": "ADA",
+}
+
+
 def get_top_tokens_data():
     """
     Fetch price and 24h change for each token from CoinGecko.
     Returns a list of dicts with 'ticker', 'price', and 'change'.
     """
     try:
-        ids = ",".join(CRYPTO_TOKENS.keys())
+        ids = ",".join(CRYPTO_TOKENS.keys())  # Now uses lowercase names
         url = (
             f"https://api.coingecko.com/api/v3/simple/price"
             f"?ids={ids}&vs_currencies=usd&include_24hr_change=true"
@@ -21,7 +32,7 @@ def get_top_tokens_data():
         data = response.json()
 
         results = []
-        for name, ticker in CRYPTO_TOKENS.items():
+        for name, ticker in CRYPTO_TOKENS.items():  # Now matches API response
             info = data.get(name, {})
             price = info.get("usd")
             change = info.get("usd_24h_change")
