@@ -10,8 +10,7 @@ from utils.text_utils import (
     is_valid_ticker
 )
 from utils.x_post import post_thread
-from utils.fetch_stock_data import fetch_last_price
-from utils.market_data import fetch_last_price
+from utils.market_data import get_market_data_client
 
 logger = logging.getLogger("hedgefund_deep_dive")
 
@@ -63,13 +62,18 @@ def post_hedgefund_deep_dive():
 
     logger.info(f"Valid cashtags for enrichment: {all_cashtags}")
 
-    # Fetch prices using yfinance
+    # Fetch prices using new unified system (IG Index + yfinance fallback)
     prices = {}
+    client = get_market_data_client()
     for tag in all_cashtags:
         ticker = tag.strip("$")
-        price_data = fetch_last_price(ticker)
-        if price_data:
-            prices[tag] = price_data
+        try:
+            price_data = client.get_price(ticker)
+            if price_data and price_data.get('price', 0) > 0:
+                prices[tag] = price_data
+        except Exception as e:
+            logger.warning(f"Failed to get price for {ticker}: {e}")
+            # Continue without this price - don't fail the whole thread
 
     logger.info(f"Fetched price data: {prices}")
 

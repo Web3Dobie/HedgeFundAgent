@@ -22,9 +22,9 @@ from utils.fetch_stock_data import (
     fetch_prior_close_yield     # Keep this specialized function
 )
 from utils.market_data import (
-    get_market_client,
-    get_top_movers_from_constituents,  # Now from unified client
-    fetch_stock_news                   # Now from unified client
+    get_market_data_client,
+    #get_top_movers_from_constituents,  # Now from unified client
+    #fetch_stock_news                   # Now from unified client
 )
 from utils.pdf_renderer import render_pdf
 from data.ticker_blocks import (
@@ -94,7 +94,7 @@ def run_briefing(period: str, test_mode: bool = False):
 
 def fetch_crypto_block() -> dict:
     """Fetch crypto prices using unified client"""
-    client = get_market_client()
+    client = get_market_data_client()
     return client.get_crypto_prices()
 
 def fetch_price_block(tickers: dict) -> dict:
@@ -105,7 +105,7 @@ def fetch_price_block(tickers: dict) -> dict:
     - Market-specific closures
     - Proper FX formatting
     """
-    client = get_market_client()
+    client = get_market_data_client()
     return client.get_multiple_prices(tickers)
 
 def generate_gpt_comment(prices: dict, region: str) -> str:
@@ -481,7 +481,7 @@ def test_market_data_only():
     try:
         # Test market data client
         print("📊 Testing market data client health...")
-        client = get_market_client()
+        client = get_market_data_client()
         health = client.health_check()
         print(f"Health Status: {health}")
         

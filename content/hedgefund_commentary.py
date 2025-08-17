@@ -15,7 +15,7 @@ from utils.text_utils import (
     fetch_scored_headlines
 )
 from utils.theme_tracker import load_recent_themes, extract_theme, is_duplicate_theme, track_theme
-from utils.fetch_stock_data import fetch_last_price
+from utils.market_data import get_market_data_client
 from utils.x_post import post_tweet
 from utils.hourly_utils import (
     get_unused_headline_today_for_hourly,
@@ -132,12 +132,17 @@ def post_hedgefund_comment():
     logger.info(f"Extracted cashtags: {cashtags}")
 
     prices = {}
+    client = get_market_data_client()
     for tag in cashtags:
         ticker = tag.strip("$")
         if is_valid_ticker(ticker):
-            data = fetch_last_price(ticker)
-            if data:
-                prices[tag] = data
+            try:
+                data = client.get_price(ticker)
+                if data and data.get('price', 0) > 0:
+                    prices[tag] = data
+            except Exception as e:
+                logger.warning(f"Failed to get price for {ticker}: {e}")
+                # Continue without this price - don't fail the whole tweet
 
     for tag, data in prices.items():
         price = data.get("price")
