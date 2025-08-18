@@ -177,85 +177,105 @@ def get_multiple_prices(symbols: List[str]) -> Dict[str, dict]:
 
 def get_top_movers_from_constituents(limit: int = 5, include_extended: bool = False) -> dict:
     """
-    Get top market movers using REST API
+    Get top market movers using Yahoo Finance's pre-computed lists
     
     Args:
-        limit: Number of top movers to return
-        include_extended: Include extended hours data (not implemented)
+        limit: Number of top movers to return (default 5)
+        include_extended: Include pre/post market data (not supported)
         
     Returns:
-        Dictionary with 'top_gainers' and 'top_losers' lists
+        dict: {
+            'top_gainers': [{'symbol': str, 'price': float, 'change_percent': float}, ...],
+            'top_losers': [{'symbol': str, 'price': float, 'change_percent': float}, ...],
+            'pre_market': [],  # Empty - not supported
+            'post_market': [], # Empty - not supported
+            'scan_time': str,
+            'total_scanned': int,
+            'valid_results': int
+        }
     """
     try:
-        # Define symbols to check for movers
-        # Use TICKER_INFO keys if available, otherwise use a default list
-        if TICKER_INFO:
-            check_symbols = list(TICKER_INFO.keys())[:25]  # Limit for performance
-        else:
-            # Default symbol list
-            check_symbols = [
-                # Major indices/ETFs
-                "SPY", "QQQ", "IWM", "DIA",
-                # Major stocks
-                "AAPL", "MSFT", "GOOGL", "AMZN", "TSLA", "META", "NVDA",
-                "JPM", "JNJ", "V", "PG", "UNH", "HD", "MA", "INTC", "VZ",
-                # Index futures (proper yfinance symbols)
-                "^GSPC", "^IXIC", "^DJI", "^RUT"
-            ]
+        # Import yahoo_fin modules
+        from yahoo_fin.stock_info import get_day_gainers, get_day_losers
         
-        logger.info(f"🔍 Scanning {len(check_symbols)} symbols for top movers...")
+        logger.info(f"📈 Fetching top {limit} movers from Yahoo Finance...")
         
-        # Get price data for all symbols
-        price_data = get_multiple_prices(check_symbols)
+        # Get Yahoo's pre-computed top movers
+        gainers_df = get_day_gainers()
+        losers_df = get_day_losers()
         
-        # Filter successful results and sort by change percentage
-        valid_results = []
-        for symbol, data in price_data.items():
-            if 'error' not in data and data.get('price', 0) > 0:
-                # Convert to tuple format for backward compatibility
-                valid_results.append({
-                    'symbol': symbol,
-                    'price': data['price'],
-                    'change_percent': data['change_percent']
+        logger.info(f"📊 Yahoo returned {len(gainers_df)} gainers, {len(losers_df)} losers")
+        
+        # Convert gainers to our expected format
+        gainers = []
+        for _, row in gainers_df.head(limit).iterrows():
+            try:
+                # Handle price field which might have commas
+                price_str = str(row['Price (Intraday)']).replace(',', '')
+                price = float(price_str)
+                
+                gainers.append({
+                    'symbol': row['Symbol'],
+                    'price': price,
+                    'change_percent': row['% Change']
                 })
+            except (ValueError, KeyError) as e:
+                logger.warning(f"⚠️ Skipping gainer {row.get('Symbol', 'UNKNOWN')}: {e}")
+                continue
         
-        # Sort by change percentage
-        sorted_by_change = sorted(valid_results, key=lambda x: x['change_percent'], reverse=True)
-        
-        # Split into gainers and losers
-        gainers = [item for item in sorted_by_change if item['change_percent'] > 0]
-        losers = [item for item in sorted_by_change if item['change_percent'] < 0]
-        
-        # Reverse losers to get biggest losers first
-        losers = list(reversed(sorted(losers, key=lambda x: x['change_percent'])))
+        # Convert losers to our expected format
+        losers = []
+        for _, row in losers_df.head(limit).iterrows():
+            try:
+                # Handle price field which might have commas
+                price_str = str(row['Price (Intraday)']).replace(',', '')
+                price = float(price_str)
+                
+                losers.append({
+                    'symbol': row['Symbol'],
+                    'price': price,
+                    'change_percent': row['% Change']
+                })
+            except (ValueError, KeyError) as e:
+                logger.warning(f"⚠️ Skipping loser {row.get('Symbol', 'UNKNOWN')}: {e}")
+                continue
         
         result = {
-            'top_gainers': gainers[:limit],
-            'top_losers': losers[:limit],
+            'top_gainers': gainers,
+            'top_losers': losers,
             'scan_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-            'total_scanned': len(check_symbols),
-            'valid_results': len(valid_results)
+            'total_scanned': len(gainers_df) + len(losers_df),
+            'valid_results': len(gainers) + len(losers)
         }
         
-        # Extended hours placeholder
+        # Extended hours placeholder (Yahoo doesn't provide this)
         if include_extended:
-            logger.warning("Extended hours not implemented with REST API yet")
+            logger.warning("📋 Extended hours data not available via Yahoo Finance API")
             result["pre_market"] = []
             result["post_market"] = []
         
-        logger.info(f"✅ Found {len(result['top_gainers'])} gainers, {len(result['top_losers'])} losers")
+        logger.info(f"✅ Successfully processed {len(gainers)} gainers, {len(losers)} losers")
         return result
         
+    except ImportError as e:
+        logger.error(f"❌ yahoo_fin not installed: {e}")
+        logger.info("💡 Install with: pip install yahoo_fin")
+        return _fallback_movers_response(str(e))
+        
     except Exception as e:
-        logger.error(f"❌ Top movers scan failed: {e}")
-        return {
-            'top_gainers': [],
-            'top_losers': [],
-            'scan_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-            'total_scanned': 0,
-            'valid_results': 0,
-            'error': str(e)
-        }
+        logger.error(f"❌ Yahoo Finance movers failed: {e}")
+        return _fallback_movers_response(str(e))
+
+def _fallback_movers_response(error_msg: str) -> dict:
+    """Return empty movers response for error cases"""
+    return {
+        'top_gainers': [],
+        'top_losers': [],
+        'scan_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+        'total_scanned': 0,
+        'valid_results': 0,
+        'error': error_msg
+    }
 
 def fetch_stock_news(ticker: str, start_date: str, end_date: str) -> List[dict]:
     """

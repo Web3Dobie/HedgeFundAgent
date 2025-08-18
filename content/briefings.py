@@ -19,7 +19,8 @@ from utils.yield_utils import (
 )
 from utils.config import DATA_DIR
 from utils.fetch_stock_data import (
-    fetch_prior_close_yield     # Keep this specialized function
+    fetch_prior_close_yield,  # Keep this specialized function
+    get_top_movers_from_constituents
 )
 from utils.market_data import (
     get_market_data_client,
