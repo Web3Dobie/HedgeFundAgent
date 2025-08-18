@@ -199,8 +199,8 @@ def get_top_movers_from_constituents(limit: int = 5, include_extended: bool = Fa
                 # Major stocks
                 "AAPL", "MSFT", "GOOGL", "AMZN", "TSLA", "META", "NVDA",
                 "JPM", "JNJ", "V", "PG", "UNH", "HD", "MA", "INTC", "VZ",
-                # Futures
-                "ES-FUT-USD", "NQ-FUT-USD", "YM-FUT-USD", "RTY-FUT-USD"
+                # Index futures (proper yfinance symbols)
+                "^GSPC", "^IXIC", "^DJI", "^RUT"
             ]
         
         logger.info(f"🔍 Scanning {len(check_symbols)} symbols for top movers...")

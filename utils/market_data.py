@@ -81,7 +81,12 @@ class MarketDataClient:
                     data = price_data[symbol]
                     price = data.get('price', 0)
                     change_pct = data.get('change_percent', 0)
-                    formatted_results[name] = f"{price:.2f} ({change_pct:+.2f}%)"
+                    
+                    # Use 4 decimal places for FX pairs, 2 for everything else
+                    if "=X" in symbol:  # FX pairs end with =X (e.g., EURUSD=X)
+                        formatted_results[name] = f"{price:.4f} ({change_pct:+.2f}%)"
+                    else:
+                        formatted_results[name] = f"{price:.2f} ({change_pct:+.2f}%)"
                 else:
                     formatted_results[name] = "N/A"
             
@@ -90,7 +95,7 @@ class MarketDataClient:
         except Exception as e:
             logger.error(f"Multiple price fetch failed: {e}")
             return {name: "Error" for name in (symbols.keys() if isinstance(symbols, dict) else symbols)}
-    
+
     def get_raw_prices(self, symbols: List[str]) -> Dict[str, Dict]:
         """
         Get raw price data (not formatted) - useful for internal processing

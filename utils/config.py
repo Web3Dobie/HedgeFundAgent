@@ -85,7 +85,7 @@ IB_MAX_CLIENTS = int(os.getenv("IB_MAX_CLIENTS", "5"))
 
 # NEW: C# REST API Configuration  
 # Both Python and C# API are on 10.0.0.5, use localhost for best performance
-CSHARP_API_URL = os.getenv("CSHARP_API_URL", "http://localhost:5090")
+CSHARP_API_URL = os.getenv("CSHARP_API_URL", "")
 CSHARP_API_TIMEOUT = int(os.getenv("CSHARP_API_TIMEOUT", "30"))
 
 # Optional: API Authentication (if you add it later)

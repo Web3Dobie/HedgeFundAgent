@@ -2,6 +2,7 @@
 """
 Standardized ticker symbols using yfinance format for universal compatibility
 Updated to work seamlessly with IG Index + yfinance fallback system
+FIXED VERSION - Removed invalid symbols and standardized format
 """
 
 # ============================================================================
@@ -30,7 +31,7 @@ ASIA_EQUITY = {
 }
 
 # ============================================================================
-# FOREX PAIRS - Standardized to yfinance format
+# FOREX PAIRS - Standardized to yfinance format (FIXED)
 # ============================================================================
 
 FX_PAIRS = {
@@ -58,13 +59,13 @@ COMMODITIES = {
 }
 
 # ============================================================================
-# TREASURY RATES - Using yfinance treasury futures
+# TREASURY RATES - Using yfinance treasury yield indices (FIXED)
 # ============================================================================
 
 RATES = {
     "10Y US Treasury": "^TNX",       # 🔄 Direct yield index (better than futures)
-    "2Y US Treasury": "^TYX",        # 🔄 Direct yield index 
-    "30Y US Treasury": "^TYX",       # 🔄 Direct yield index
+    "2Y US Treasury": "^IRX",        # 🔄 13 Week Treasury Bill (closest to 2Y available)
+    "30Y US Treasury": "^TYX",       # 🔄 30 Year Treasury Yield
 }
 
 # Alternative approach using futures (backup)
@@ -87,13 +88,13 @@ CRYPTO = {
 }
 
 # ============================================================================
-# YIELD CALCULATION SYMBOLS
+# YIELD CALCULATION SYMBOLS (FIXED)
 # ============================================================================
 
 YIELD_SYMBOLS = {
-    "2Y": "^TYX",                    # Direct yield indices are better
-    "10Y": "^TNX", 
-    "30Y": "^TYX"
+    "2Y": "^IRX",                    # 13 Week Treasury Bill
+    "10Y": "^TNX",                   # 10 Year Treasury Note
+    "30Y": "^TYX"                    # 30 Year Treasury Bond
 }
 
 # ============================================================================

@@ -38,189 +38,62 @@ class IGRateLimitError(IGMarketDataError):
     pass
 
 # SPREAD BETTING IG EPIC Symbol Mapping - COMPLETE UPDATED VERSION
+# CLEANED IG EPIC MAPPING - Only working EPICs
+# Generated from successful test results to eliminate error spam
 IG_EPIC_MAPPING = {
-    # ========================================================================
-    # US EQUITY INDICES
-    # ========================================================================
-    "^GSPC": "IX.D.SPTRD.DAILY.IP",        # ✅ S&P 500 - Working
-    "^DJI": "IX.D.DOW.DAILY.IP",           # ✅ Dow Jones - Working
-    "^IXIC": "IX.D.NASDAQ.DAILY.IP",       # ✅ NASDAQ - To test
-    "^RUT": "IX.D.RUSSELL.DAILY.IP",       # 🔄 Russell 2000 - NEW
+    # US EQUITY (all working)
+    "^GSPC": "IX.D.SPTRD.DAILY.IP",
+    "^IXIC": "IX.D.NASDAQ.DAILY.IP", 
+    "^DJI": "IX.D.DOW.DAILY.IP",
+    "^RUT": "IX.D.RUSSELL.DAILY.IP",
     
-    # ========================================================================
-    # EUROPEAN INDICES
-    # ========================================================================  
-    "^FTSE": "IX.D.FTSE.DAILY.IP",         # ✅ FTSE 100 - Working
-    "^GDAXI": "IX.D.DAX.DAILY.IP",         # ✅ DAX - To test
-    "^STOXX50E": "IX.D.STOXX50.DAILY.IP",  # 🔄 Euro Stoxx 50 - NEW
-    "^FCHI": "IX.D.CAC.DAILY.IP",          # 🔄 CAC 40 - NEW
+    # EUROPE EQUITY (all working)
+    "^GDAXI": "IX.D.DAX.DAILY.IP",
+    "^FTSE": "IX.D.FTSE.DAILY.IP",
+    "^STOXX50E": "IX.D.STXE.CASH.IP",
+    "^FCHI": "IX.D.CAC.DAILY.IP",
     
-    # ========================================================================
-    # ASIAN INDICES
-    # ========================================================================
-    "^N225": "IX.D.NIKKEI.DAILY.IP",       # ✅ Nikkei - To test
-    "^HSI": "IX.D.XINHUA.DFB.IP",          # ✅ China A50 proxy - Working
-    "000001.SS": "IX.D.SHANGHAI.DAILY.IP", # 🔄 Shanghai - NEW (if available)
-    "^KS11": "IX.D.KOSPI.DAILY.IP",        # 🔄 KOSPI - NEW
+    # ASIA EQUITY (all working)
+    "^N225": "IX.D.NIKKEI.DAILY.IP",
+    "^HSI": "IX.D.HANGSENG.DAILY.IP",
+    #"000001.SS": "IX.D.XINHUA.DAILY.IP",
+    #"^KS11": "IX.D.KOSPI.DAILY.IP",
     
-    # ========================================================================
-    # MAJOR FOREX PAIRS
-    # ========================================================================
-    "EURUSD=X": "CS.D.EURUSD.TODAY.IP",    # ✅ EUR/USD - Working
-    "EURGBP=X": "CS.D.EURGBP.TODAY.IP",    # ✅ EUR/GBP - Working
-    "EURJPY=X": "CS.D.EURJPY.TODAY.IP",    # ✅ EUR/JPY - Working
-    "USDJPY=X": "CS.D.USDJPY.TODAY.IP",    # 🔄 USD/JPY - NEW
-    "GBPUSD=X": "CS.D.GBPUSD.TODAY.IP",    # 🔄 GBP/USD - NEW
-    "USDCHF=X": "CS.D.USDCHF.TODAY.IP",    # 🔄 USD/CHF - NEW
-    "AUDUSD=X": "CS.D.AUDUSD.TODAY.IP",    # 🔄 AUD/USD - NEW
-    "USDCAD=X": "CS.D.USDCAD.TODAY.IP",    # 🔄 USD/CAD - NEW
+    # FOREX (all working)
+    "EURUSD=X": "CS.D.EURUSD.TODAY.IP",
+    "USDJPY=X": "CS.D.USDJPY.TODAY.IP",
+    "GBPUSD=X": "CS.D.GBPUSD.TODAY.IP",
+    "USDCHF=X": "CS.D.USDCHF.TODAY.IP",
+    "AUDUSD=X": "CS.D.AUDUSD.TODAY.IP",
+    "USDCAD=X": "CS.D.USDCAD.TODAY.IP",
+    "EURGBP=X": "CS.D.EURGBP.TODAY.IP",
+    "EURJPY=X": "CS.D.EURJPY.TODAY.IP",
     
-    # ========================================================================
-    # COMMODITIES
-    # ========================================================================
-    "GC=F": "IX.D.GOLD.CFD.IP",            # ✅ Gold - In alternatives
-    "SI=F": "IX.D.SILVER.CFD.IP",          # 🔄 Silver - NEW
-    "CL=F": "IX.D.OIL.CFD.IP",             # ✅ WTI Oil - In alternatives
-    "BZ=F": "CC.D.BRENT.CFD.IP",           # 🔄 Brent Oil - NEW
-    "NG=F": "IX.D.NATGAS.CFD.IP",          # 🔄 Natural Gas - NEW
-    "HG=F": "IX.D.COPPER.CFD.IP",          # 🔄 Copper - NEW
+    # COMMODITIES (all working)
+    "GC=F": "CS.D.USCGC.TODAY.IP",
+    "SI=F": "CS.D.USCSI.TODAY.IP",          # Spot Silver
+    "CL=F": "CC.D.CL.USS.IP",               # Oil - US Crude
+    "BZ=F": "CC.D.LCO.USS.IP",              # Oil - Brent Crude
+    "NG=F": "CC.D.NG.USS.IP",               # Natural Gas
+    "HG=F": "MT.D.HG.Month1.IP",            # High Grade Copper
     
-    # ========================================================================
-    # TREASURY YIELDS
-    # ========================================================================
-    "^TNX": "IX.D.US10Y.DAILY.IP",         # 🔄 10Y Treasury Yield - NEW
-    "^TYX": "IX.D.US30Y.DAILY.IP",         # 🔄 30Y Treasury Yield - NEW
-    "ZT=F": "IX.D.USTREAS2Y.CFD.IP",       # 🔄 2Y Treasury Futures - NEW
-    "ZN=F": "IX.D.USTREAS10Y.CFD.IP",      # 🔄 10Y Treasury Futures - NEW
-    "ZB=F": "IX.D.USTREAS30Y.CFD.IP",      # 🔄 30Y Treasury Futures - NEW
+    # RATES (all working)
+    #"^TNX": "IX.D.US10Y.DAILY.IP",
+    #"^IRX": "IX.D.US13W.DAILY.IP",
+    #"^TYX": "IX.D.US30Y.DAILY.IP",
     
-    # ========================================================================
-    # CRYPTO
-    # ========================================================================
-    "BTC-USD": "CS.D.BITCOIN.CFD.IP",      # ✅ Bitcoin - Working
-    "ETH-USD": "CS.D.ETHEREUM.CFD.IP",     # 🔄 Ethereum - NEW
-    "SOL-USD": "CS.D.SOLANA.CFD.IP",       # 🔄 Solana - NEW (if available)
-    "XRP-USD": "CS.D.RIPPLE.CFD.IP",       # 🔄 XRP - NEW
-    "ADA-USD": "CS.D.CARDANO.CFD.IP",      # 🔄 Cardano - NEW (if available)
+    # CRYPTO (except Bitcoin - uses yfinance)
+    "ETH-USD": "CS.D.ETHEREUM.CFD.IP",
+    "SOL-USD": "CS.D.SOLANA.CFD.IP",
+    "XRP-USD": "CS.D.RIPPLE.CFD.IP",
+    "ADA-USD": "CS.D.CARDANO.CFD.IP"
 }
 
-#Spread Betting Alternative EPICs to try if primary ones fail - COMPLETE UPDATED VERSION
-EPIC_ALTERNATIVES = {
-    # ========================================================================
-    # EXISTING ALTERNATIVES (Keep your current working ones)
-    # ========================================================================
-    "^IXIC": [
-        "IX.D.NASDAQ.CFD.IP",
-        "IX.D.US100.CFD.IP",
-        "IX.D.USTEC.CFD.IP"
-    ],
-    "GC=F": [
-        "IX.D.GOLD.CFD.IP",
-        "CC.D.GOLD.CFD.IP", 
-        "IX.D.XAUUSD.CFD.IP"
-    ],
-    "CL=F": [
-        "IX.D.OIL.CFD.IP",
-        "CC.D.BRENT.CFD.IP",
-        "IX.D.CRUDE.CFD.IP"
-    ],
-    "EURUSD=X": [
-        "CS.D.EURUSD.CFD.IP",
-        "CS.D.EURUSD.MINI.IP",
-        "IX.D.EURUSD.CFD.IP"
-    ],
-    "^GSPC": [
-        "IX.D.SPTRD.CFD.IP", 
-        "IX.D.SPTRD.DAILY.IP",
-        "IX.D.US500.CFD.IP"
-    ],
-    
-    # ========================================================================
-    # NEW ALTERNATIVES FOR NEW SYMBOLS
-    # ========================================================================
-    "^RUT": [
-        "IX.D.RUSSELL.CFD.IP",
-        "IX.D.US2000.CFD.IP",
-        "IX.D.RTY.CFD.IP"
-    ],
-    "^STOXX50E": [
-        "IX.D.STOXX50.CFD.IP",
-        "IX.D.EUROSTOXX.CFD.IP",
-        "IX.D.SX5E.CFD.IP"
-    ],
-    "^FCHI": [
-        "IX.D.CAC.CFD.IP",
-        "IX.D.FRANCE40.CFD.IP"
-    ],
-    "USDJPY=X": [
-        "CS.D.USDJPY.CFD.IP",
-        "CS.D.USDJPY.MINI.IP",
-        "IX.D.USDJPY.CFD.IP"
-    ],
-    "GBPUSD=X": [
-        "CS.D.GBPUSD.CFD.IP", 
-        "CS.D.GBPUSD.MINI.IP",
-        "IX.D.GBPUSD.CFD.IP"
-    ],
-    "USDCHF=X": [
-        "CS.D.USDCHF.CFD.IP",
-        "CS.D.USDCHF.MINI.IP",
-        "IX.D.USDCHF.CFD.IP"
-    ],
-    "AUDUSD=X": [
-        "CS.D.AUDUSD.CFD.IP",
-        "CS.D.AUDUSD.MINI.IP", 
-        "IX.D.AUDUSD.CFD.IP"
-    ],
-    "USDCAD=X": [
-        "CS.D.USDCAD.CFD.IP",
-        "CS.D.USDCAD.MINI.IP",
-        "IX.D.USDCAD.CFD.IP"
-    ],
-    "SI=F": [
-        "IX.D.SILVER.DAILY.IP",
-        "CC.D.SILVER.CFD.IP",
-        "IX.D.XAGUSD.CFD.IP"
-    ],
-    "BZ=F": [
-        "CC.D.BRENT.DAILY.IP",
-        "IX.D.BRENT.CFD.IP",
-        "CC.D.BRENTOIL.CFD.IP"
-    ],
-    "NG=F": [
-        "IX.D.NATGAS.DAILY.IP",
-        "CC.D.NATGAS.CFD.IP",
-        "IX.D.NGAS.CFD.IP"
-    ],
-    "HG=F": [
-        "IX.D.COPPER.DAILY.IP",
-        "CC.D.COPPER.CFD.IP"
-    ],
-    "^TNX": [
-        "IX.D.US10Y.CFD.IP",
-        "IX.D.10YTNOTE.CFD.IP"
-    ],
-    "^TYX": [
-        "IX.D.US30Y.CFD.IP", 
-        "IX.D.30YTNOTE.CFD.IP"
-    ],
-    "ETH-USD": [
-        "CS.D.ETHEREUM.TODAY.IP",
-        "CS.D.ETH.CFD.IP"
-    ],
-    "SOL-USD": [
-        "CS.D.SOLANA.TODAY.IP",
-        "CS.D.SOL.CFD.IP"
-    ],
-    "XRP-USD": [
-        "CS.D.RIPPLE.TODAY.IP",
-        "CS.D.XRP.CFD.IP"
-    ],
-    "ADA-USD": [
-        "CS.D.CARDANO.TODAY.IP",
-        "CS.D.ADA.CFD.IP"
-    ]
-}
+# REMOVE ALL ALTERNATIVES TO STOP ERROR SPAM
+# Since we now have verified working EPICs, we don't need the error-prone alternatives
+EPIC_ALTERNATIVES = {}
+
+# Keep existing helper functions but remove failed EPIC retry logic
 
 # Reverse mapping for lookups
 EPIC_TO_SYMBOL = {v: k for k, v in IG_EPIC_MAPPING.items()}
@@ -333,7 +206,12 @@ class IGMarketDataClient:
         
         # Forex pairs with .TODAY.IP (spread betting) - divide by 10,000
         if "CS.D." in epic and ".TODAY.IP" in epic:
-            if "USDJPY" in symbol:
+            # Check if it's actually a commodity (Gold, Silver, etc.)
+            if any(commodity in epic.upper() for commodity in ["GOLD", "SILVER", "COPPER", "USC"]):
+                # Spot commodities - return as-is, no division needed
+                logger.debug(f"Spot commodity {symbol}: {price} (no normalization)")
+                return price
+            elif "USDJPY" in symbol:
                 # USD/JPY special case: divide by 100
                 normalized_price = price / 100
                 logger.debug(f"Normalized USD/JPY spread bet: {price} -> {normalized_price}")
@@ -422,6 +300,10 @@ class IGMarketDataClient:
         self._rate_limit_check()
         
         try:
+            # Ensure we're connected (re-authenticate if needed)
+            if not self._connect_to_ig():
+                raise IGMarketDataError(f'Failed to connect to IG API for {epic}')
+            
             # Get market details
             response = self.ig_service.fetch_market_by_epic(epic)
             

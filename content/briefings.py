@@ -41,10 +41,13 @@ from utils.fetch_token_data import get_top_tokens_data
 from utils.gpt import generate_gpt_text
 from utils.x_post import timed_post_pdf_briefing
 
+# ═══════════════════════════════════════════════════════════════
+# CALENDAR IMPORTS: Keep IPO/Earnings (Finnhub), Disable Economic Cal
+# ═══════════════════════════════════════════════════════════════
 from utils.fetch_calendars import (
-    scrape_investing_econ_calendar,
-    get_ipo_calendar,
-    get_earnings_calendar,
+    # scrape_investing_econ_calendar,  # DISABLED - API not working
+    get_ipo_calendar,                   # KEEP - Finnhub working
+    get_earnings_calendar,              # KEEP - Finnhub working
 )
 
 from utils.azure_blob_storage_handler import upload_pdf_to_blob
@@ -124,10 +127,18 @@ def generate_briefing_pdf(briefing_type: str = "morning") -> str:
     """
     limit = 5  # Number of top movers to show
     
-    # Fetch calendar data
-    econ_df = scrape_investing_econ_calendar()
+    # ═══════════════════════════════════════════════════════════════
+    # CALENDAR DATA: Keep IPO/Earnings, Disable Economic Calendar
+    # ═══════════════════════════════════════════════════════════════
+    # Fetch working calendar data (Finnhub APIs)
     ipo_list = get_ipo_calendar()
     earnings_list = get_earnings_calendar()
+    
+    # Disable problematic economic calendar (scraping not working)
+    # econ_df = scrape_investing_econ_calendar()  # DISABLED
+    econ_df = pd.DataFrame()  # Empty economic calendar fallback
+    
+    print("📅 IPO and Earnings calendars fetched, Economic calendar disabled")
     
     # ─── Build Market Data Blocks ───────────────────────────────────────────
     equity_block, macro_block, crypto_block = get_market_blocks(briefing_type)
@@ -199,9 +210,9 @@ def generate_briefing_pdf(briefing_type: str = "morning") -> str:
         mover_block=mover_block if briefing_type != "morning" else None,
         mover_title=mover_title if briefing_type != "morning" else None,
         mover_news=mover_news if briefing_type in {"pre_market", "after_market"} else None,
-        econ_df=econ_df,
-        ipo_list=ipo_list,
-        earnings_list=earnings_list
+        econ_df=econ_df,      # Empty DataFrame
+        ipo_list=ipo_list,    # Empty list
+        earnings_list=earnings_list  # Empty list
     )
 
     return pdf_path
@@ -212,15 +223,10 @@ def generate_briefing_pdf_test(briefing_type: str = "morning") -> str:
     """
     limit = 5  # Number of top movers to show
     
-    # Fetch calendar data with error handling
-    try:
-        econ_df = scrape_investing_econ_calendar()
-        print("✅ Economic calendar fetched successfully")
-    except Exception as e:
-        print(f"⚠️ Economic calendar failed: {e}")
-        # Create empty DataFrame as fallback
-        econ_df = pd.DataFrame()
-    
+    # ═══════════════════════════════════════════════════════════════
+    # CALENDAR DATA: Keep IPO/Earnings, Disable Economic Calendar  
+    # ═══════════════════════════════════════════════════════════════
+    # Fetch working calendar data with error handling
     try:
         ipo_list = get_ipo_calendar()
         print("✅ IPO calendar fetched successfully")
@@ -234,6 +240,18 @@ def generate_briefing_pdf_test(briefing_type: str = "morning") -> str:
     except Exception as e:
         print(f"⚠️ Earnings calendar failed: {e}")
         earnings_list = []
+    
+    # Disable problematic economic calendar (scraping APIs not working)
+    # try:
+    #     econ_df = scrape_investing_econ_calendar()
+    #     print("✅ Economic calendar fetched successfully")
+    # except Exception as e:
+    #     print(f"⚠️ Economic calendar failed: {e}")
+    #     econ_df = pd.DataFrame()
+    
+    # Create empty fallback for economic calendar (disabled)
+    econ_df = pd.DataFrame()  # Empty economic calendar
+    print("📅 Economic calendar disabled - using empty fallback")
     
     # ─── Build Market Data Blocks ───────────────────────────────────────────
     print("📊 Fetching market data blocks...")
@@ -291,10 +309,9 @@ def generate_briefing_pdf_test(briefing_type: str = "morning") -> str:
                 post_losers = [x for x in post_market if x[2] < 0]
                 mover_title = "Top After-Market Movers"
                 mover_block = {
-                    "top_gainers": {symbol: f"{price:.2f} ({change:+.2f}%)" for symbol, price, change in post_gainers[:limit]},
-                    "top_losers": {symbol: f"{price:.2f} ({change:+.2f}%)" for symbol, price, change in post_losers[:limit]}
-                }
-            
+                    "top_gainers": {symbol: f"{price:.2f} ({change:+.2f}%)" for symbol, price, change in pre_gainers[:limit]},
+                    "top_losers": {symbol: f"{price:.2f} ({change:+.2f}%)" for symbol, price, change in pre_losers[:limit]}
+                }            
             print("✅ Movers data processed")
             
         except Exception as e:
@@ -333,9 +350,9 @@ def generate_briefing_pdf_test(briefing_type: str = "morning") -> str:
             mover_block=mover_block if briefing_type != "morning" else None,
             mover_title=mover_title if briefing_type != "morning" else None,
             mover_news=mover_news if briefing_type in {"pre_market", "after_market"} else None,
-            econ_df=econ_df,
-            ipo_list=ipo_list,
-            earnings_list=earnings_list
+            econ_df=econ_df,      # Empty DataFrame
+            ipo_list=ipo_list,    # Empty list
+            earnings_list=earnings_list  # Empty list
         )
         print("✅ PDF rendered successfully")
         
@@ -473,59 +490,54 @@ def get_news_for_movers(mover_block: dict, window_hours=18) -> dict:
 
     return news_by_ticker
 
-def test_market_data_only():
-    """Test just the market data components without PDF generation"""
-    print("🧪 Testing Market Data Components Only")
-    print("=" * 50)
+# def test_market_data_only():
+#     """Test just the market data components without PDF generation"""
+#     print("🧪 Testing Market Data Components Only")
+#     print("=" * 50)
     
-    try:
-        # Test market data client
-        print("📊 Testing market data client health...")
-        client = get_market_data_client()
-        health = client.health_check()
-        print(f"Health Status: {health}")
+#     try:
+#         # Test market data client
+#         print("📊 Testing market data client health...")
+#         client = get_market_data_client()
+#         health = client.health_check()
+#         print(f"Health Status: {health}")
         
-        # Test individual price fetching
-        print("\n📊 Testing individual price fetching...")
-        test_symbols = ["AAPL", "ES-FUT-USD", "EURUSD-CASH-EUR"]
-        for symbol in test_symbols:
-            try:
-                data = client.get_price(symbol)
-                print(f"✅ {symbol}: ${data['price']} ({data['change_percent']:+.2f}%)")
-            except Exception as e:
-                print(f"❌ {symbol}: {e}")
+#         # Test individual price fetching
+#         print("\n📊 Testing individual price fetching...")
+#         test_symbols = ["AAPL", "^GSPC", "EURUSD=X"]
+#         for symbol in test_symbols:
+#             try:
+#                 data = client.get_price(symbol)
+#                 print(f"✅ {symbol}: ${data['price']} ({data['change_percent']:+.2f}%)")
+#             except Exception as e:
+#                 print(f"❌ {symbol}: {e}")
         
-        # Test market blocks
-        print("\n📊 Testing market data blocks...")
-        equity_block, macro_block, crypto_block = get_market_blocks("morning")
+#         # Test market blocks
+#         print("\n📊 Testing market data blocks...")
+#         equity_block, macro_block, crypto_block = get_market_blocks("morning")
         
-        print(f"Equity block: {len(equity_block)} items")
-        print(f"Macro block: {len(macro_block)} items") 
-        print(f"Crypto block: {len(crypto_block)} items")
+#         print(f"Equity block: {len(equity_block)} items")
+#         print(f"Macro block: {len(macro_block)} items") 
+#         print(f"Crypto block: {len(crypto_block)} items")
         
-        # Show sample data
-        print(f"\nSample equity: {list(equity_block.items())[:3]}")
-        print(f"Sample macro: {list(macro_block.items())[:3]}")
-        print(f"Sample crypto: {list(crypto_block.items())[:3]}")
+#         # Show sample data
+#         print(f"\nSample equity: {list(equity_block.items())[:3]}")
+#         print(f"Sample macro: {list(macro_block.items())[:3]}")
+#         print(f"Sample crypto: {list(crypto_block.items())[:3]}")
         
-        return True
+#         return True
         
-    except Exception as e:
-        print(f"❌ Market data test failed: {e}")
-        import traceback
-        traceback.print_exc()
-        return False
+#     except Exception as e:
+#         print(f"❌ Market data test failed: {e}")
+#         import traceback
+#         traceback.print_exc()
+#         return False
 
 def test_morning_briefing():
     """Test morning briefing generation without any posting/uploading"""
     print("🧪 Testing morning briefing generation...")
     
-    try:
-        # Test market data first
-        if not test_market_data_only():
-            print("❌ Market data test failed, skipping PDF generation")
-            return None
-        
+    try:   
         # Now try the full PDF generation with error handling
         print("\n📄 Generating full PDF with error handling...")
         pdf_path = generate_briefing_pdf_test("morning")

@@ -49,7 +49,7 @@ class CSharpRestApiClient:
         if base_url is None:
             # Both Python client and C# REST API are on 10.0.0.5
             # Use localhost for optimal performance and reliability
-            base_url = f"http://localhost:5090"
+            base_url = f""
         
         self.base_url = base_url.rstrip('/')
         self.timeout = timeout

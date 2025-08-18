@@ -3,7 +3,7 @@ import os
 import time
 import traceback
 from datetime import datetime, timezone
-from functools import partial
+from functools import partial, wraps
 
 import schedule
 from dotenv import load_dotenv
@@ -16,6 +16,10 @@ from utils.tg_notifier import send_telegram_message
 
 load_dotenv()
 
+# Using same naming convention as X-AI-Agent
+BOT_ID = os.getenv("TG_BOT_TOKEN")
+
+# Re-wrap stdout/stderr so they use UTF-8 instead of cp1252:
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
 sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
 
@@ -24,6 +28,26 @@ logging.basicConfig(
     format='%(asctime)s %(levelname)s %(message)s',
     stream=sys.stdout
 )
+
+def send_telegram_log(message: str, level: str = "INFO"):
+    """Send formatted log message to Telegram"""
+    emoji_map = {
+        "INFO": "ℹ️",
+        "SUCCESS": "✅", 
+        "WARNING": "⚠️",
+        "ERROR": "❌",
+        "START": "🚀",
+        "COMPLETE": "🎯",
+        "HEARTBEAT": "💓"
+    }
+    
+    emoji = emoji_map.get(level, "📝")
+    timestamp = datetime.now().strftime('%H:%M:%S')
+    
+    try:
+        send_telegram_message(f"{emoji} **{level}** | {timestamp}\n{message}")
+    except Exception as e:
+        logging.error(f"Failed to send Telegram log: {e}")
 
 def send_crash_alert(error_details: str, error_type: str = "CRASH"):
     """Send detailed crash notification to Telegram"""
@@ -51,64 +75,102 @@ def send_crash_alert(error_details: str, error_type: str = "CRASH"):
     except Exception as e:
         logging.error(f"[ALERT FAILED] Could not send Telegram alert: {e}")
 
-def safe_job_wrapper(func, job_name: str):
-    """Wrapper to catch and alert on individual job failures"""
-    def wrapper(*args, **kwargs):
-        try:
-            return func(*args, **kwargs)
-        except Exception as e:
-            error_msg = f"Job '{job_name}' failed: {str(e)}\n{traceback.format_exc()}"
-            logging.error(error_msg)
-            send_crash_alert(error_msg, "JOB FAILURE")
-            # Don't re-raise - let scheduler continue with other jobs
-    return wrapper
+def telegram_job_wrapper(job_name: str):
+    """Enhanced decorator combining Telegram logging with crash handling"""
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            start_time = datetime.now()
+            
+            # Log job start
+            send_telegram_log(f"Starting: `{job_name}`", "START")
+            logging.info(f"🚀 Starting job: {job_name}")
+            
+            try:
+                # Execute the job
+                result = func(*args, **kwargs)
+                
+                # Calculate duration
+                duration = datetime.now() - start_time
+                duration_str = str(duration).split('.')[0]  # Remove microseconds
+                
+                # Log successful completion
+                send_telegram_log(
+                    f"Completed: `{job_name}`\n⏱️ Duration: {duration_str}", 
+                    "COMPLETE"
+                )
+                logging.info(f"✅ Completed job: {job_name} in {duration_str}")
+                
+                return result
+                
+            except Exception as e:
+                # Calculate duration even for failed jobs
+                duration = datetime.now() - start_time
+                duration_str = str(duration).split('.')[0]
+                
+                # Log error with details to Telegram
+                error_msg = f"Failed: `{job_name}`\n⏱️ Duration: {duration_str}\n❌ Error: {str(e)}"
+                send_telegram_log(error_msg, "ERROR")
+                
+                # Send detailed crash alert (keeps existing functionality)
+                detailed_error = f"Job '{job_name}' failed: {str(e)}\n{traceback.format_exc()}"
+                send_crash_alert(detailed_error, "JOB FAILURE")
+                
+                # Also log full traceback locally
+                logging.error(f"❌ Job failed: {job_name}")
+                logging.error(f"Error: {str(e)}")
+                logging.error(traceback.format_exc())
+                
+                # Don't re-raise to maintain existing behavior (let scheduler continue)
+                
+        return wrapper
+    return decorator
 
-print("🕒 Hedge Fund Investor Scheduler is live. Waiting for scheduled posts…")
+print("🕒 HedgeFund Investor Scheduler is live. Waiting for scheduled posts…")
 sys.stdout.flush()
 
 # Send startup notification
-try:
-    send_telegram_message("✅ **HedgeFund Scheduler Started**\n🕒 All scheduled jobs are now active")
-except Exception:
-    pass  # Don't fail startup if Telegram is down
+send_telegram_log("HedgeFund Scheduler Started 💰\nAll scheduled jobs are now active", "SUCCESS")
 
-# --- Schedule Jobs with Error Wrapping ---
+# --- Schedule Jobs with Enhanced Telegram Logging ---
+
+# Headlines ingestion with detailed tracking
 schedule.every().hour.at(":30").do(
-    safe_job_wrapper(fetch_and_score_headlines, "fetch_and_score_headlines")
+    telegram_job_wrapper("fetch_and_score_headlines")(fetch_and_score_headlines)
 )
 
-# --- Daily Hedge Fund Tweets ---
+# --- Daily Hedge Fund Commentary Tweets ---
 for hour in range(9, 21, 3):  # 9am, 12am, 3pm, 6pm, 9pm
     schedule.every().day.at(f"{hour:02d}:00").do(
-        safe_job_wrapper(post_hedgefund_comment, f"hedgefund_comment_{hour}")
+        telegram_job_wrapper(f"hedgefund_comment_{hour:02d}h")(post_hedgefund_comment)
     )
 
-# --- Weekday Briefings ---
+# --- Weekday Briefings with Time-Specific Tracking ---
+briefing_schedule = {
+    "06:45": "morning",
+    "13:10": "pre_market", 
+    "16:00": "mid_day",
+    "21:40": "after_market"
+}
+
 for day in ["monday", "tuesday", "wednesday", "thursday", "friday"]:
-    getattr(schedule.every(), day).at("06:45").do(
-        safe_job_wrapper(partial(run_briefing, "morning"), f"morning_briefing_{day}")
-    )
-    getattr(schedule.every(), day).at("13:10").do(
-        safe_job_wrapper(partial(run_briefing, "pre_market"), f"pre_market_briefing_{day}")
-    )
-    getattr(schedule.every(), day).at("16:00").do(
-        safe_job_wrapper(partial(run_briefing, "mid_day"), f"mid_day_briefing_{day}")
-    )
-    getattr(schedule.every(), day).at("21:40").do(
-        safe_job_wrapper(partial(run_briefing, "after_market"), f"after_market_briefing_{day}")
-    )
+    for time_str, briefing_type in briefing_schedule.items():
+        job_name = f"{briefing_type}_briefing_{day}_{time_str.replace(':', '')}"
+        getattr(schedule.every(), day).at(time_str).do(
+            telegram_job_wrapper(job_name)(partial(run_briefing, briefing_type))
+        )
 
 # --- Daily Deep Dive Thread ---
 schedule.every().day.at("22:00").do(
-    safe_job_wrapper(post_hedgefund_deep_dive, "deep_dive_thread")
+    telegram_job_wrapper("deep_dive_thread_22h")(post_hedgefund_deep_dive)
 )
 
 # --- Weekly Log Rotation ---
 schedule.every().sunday.at("23:50").do(
-    safe_job_wrapper(rotate_logs, "log_rotation")
+    telegram_job_wrapper("weekly_log_rotation")(rotate_logs)
 )
 
-# --- Enhanced Run Loop with Crash Detection ---
+# --- Enhanced Run Loop with Heartbeat and Crash Detection ---
 last_heartbeat = time.time()
 heartbeat_interval = 3600  # Send heartbeat every hour
 
@@ -121,29 +183,28 @@ try:
             current_time = time.time()
             if current_time - last_heartbeat > heartbeat_interval:
                 pending_jobs = len(schedule.get_jobs())
-                send_telegram_message(f"💓 **Scheduler Heartbeat**\n⏰ {datetime.now().strftime('%H:%M')} - {pending_jobs} jobs scheduled")
+                next_job = schedule.next_run()
+                next_job_str = next_job.strftime('%H:%M') if next_job else "None"
+                
+                heartbeat_msg = f"HedgeFund Scheduler Alive 💓\n📊 Jobs: {pending_jobs} active\n⏰ Next: {next_job_str}"
+                send_telegram_log(heartbeat_msg, "HEARTBEAT")
                 last_heartbeat = current_time
                 
-        except Exception as e:
-            error_details = f"Scheduler loop error: {str(e)}\n{traceback.format_exc()}"
-            send_crash_alert(error_details, "LOOP ERROR")
-            logging.error(f"Error in scheduler loop: {e}")
-            # Wait a bit before retrying
-            time.sleep(60)
+            time.sleep(30)  # Check every 30 seconds
             
-        time.sleep(30)
-        
-except KeyboardInterrupt:
-    logging.info("Scheduler stopped by user (SIGINT)")
-    try:
-        send_telegram_message("⏹️ **HedgeFund Scheduler Stopped**\n👤 Manual shutdown via SIGINT")
-    except Exception:
-        pass
-    sys.exit(0)
-    
-except Exception as e:
-    # Critical crash - send alert and exit
-    error_details = f"CRITICAL SCHEDULER CRASH: {str(e)}\n{traceback.format_exc()}"
-    send_crash_alert(error_details, "CRITICAL CRASH")
-    logging.critical(error_details)
-    sys.exit(1)
+        except KeyboardInterrupt:
+            logging.info("⏹️ Scheduler shutdown requested")
+            send_telegram_log("HedgeFund Scheduler Shutdown ⏹️\nManual stop requested", "WARNING")
+            break
+            
+        except Exception as e:
+            error_msg = f"Scheduler loop error: {str(e)}\n{traceback.format_exc()}"
+            logging.error(error_msg)
+            send_crash_alert(error_msg, "SCHEDULER LOOP ERROR")
+            time.sleep(60)  # Wait before retrying
+            
+except Exception as fatal_error:
+    fatal_msg = f"Fatal scheduler error: {str(fatal_error)}\n{traceback.format_exc()}"
+    logging.critical(fatal_msg)
+    send_crash_alert(fatal_msg, "FATAL ERROR")
+    raise
