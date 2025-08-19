@@ -176,6 +176,67 @@ class MarketDataClient:
         
         return self.get_multiple_prices(commodities_symbols)
     
+    # utils/market_data.py - ADD THIS METHOD TO YOUR MarketDataClient CLASS
+
+    def get_crypto_prices(self) -> Dict[str, Dict[str, Union[float, str]]]:
+        """
+        Get crypto prices using your existing fetch_token_data module (CoinGecko)
+        Returns raw price data (not formatted strings)
+        """
+        try:
+            from utils.fetch_token_data import get_top_tokens_data
+            
+            # Get crypto data from your working CoinGecko module
+            crypto_data = get_top_tokens_data()
+            
+            # Map the results to the expected format
+            ticker_to_name = {
+                "BTC": "Bitcoin",
+                "ETH": "Ethereum", 
+                "SOL": "Solana",
+                "XRP": "XRP",
+                "ADA": "Cardano"
+            }
+            
+            crypto_results = {}
+            
+            for item in crypto_data:
+                ticker = item['ticker']
+                price = item['price']
+                change = item['change']
+                
+                name = ticker_to_name.get(ticker, ticker)
+                crypto_results[name] = {
+                    'price': float(price),
+                    'change_percent': float(change),
+                    'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                    'source': 'CoinGecko'
+                }
+            
+            # Ensure we have the expected structure
+            expected_tokens = ["Bitcoin", "Ethereum", "Solana", "XRP", "Cardano"]
+            for token in expected_tokens:
+                if token not in crypto_results:
+                    crypto_results[token] = {
+                        'price': 0.0,
+                        'change_percent': 0.0,
+                        'source': 'error',
+                        'error': 'Data not available'
+                    }
+            
+            logger.info(f"✅ Crypto prices via CoinGecko: {len([v for v in crypto_results.values() if v.get('price', 0) > 0])}/5 valid")
+            return crypto_results
+            
+        except Exception as e:
+            logger.error(f"❌ Crypto prices fetch failed: {e}")
+            return {
+                "Bitcoin": {'price': 0.0, 'change_percent': 0.0, 'source': 'error'},
+                "Ethereum": {'price': 0.0, 'change_percent': 0.0, 'source': 'error'},
+                "Solana": {'price': 0.0, 'change_percent': 0.0, 'source': 'error'},
+                "XRP": {'price': 0.0, 'change_percent': 0.0, 'source': 'error'},
+                "Cardano": {'price': 0.0, 'change_percent': 0.0, 'source': 'error'}
+            }
+
     def get_news(self, ticker: str, start_date: str, end_date: str) -> List[Dict]:
         """
         Get news for a ticker (placeholder - IG doesn't provide news API)
