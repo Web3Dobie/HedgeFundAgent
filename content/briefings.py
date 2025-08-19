@@ -63,7 +63,7 @@ finnhub_client = finnhub.Client(api_key=api_key)
 
 def run_briefing(period: str, test_mode: bool = False):
     """
-    Main briefing function with optional test mode
+    Main briefing function with fixed Notion logging
     """
     logging.info(f"Generating {period} market briefing PDF")
 
@@ -79,22 +79,46 @@ def run_briefing(period: str, test_mode: bool = False):
     pdf_url = upload_pdf_to_blob(pdf_path, blob_name)
     logging.info(f"Uploaded PDF to Azure Blob Storage: {pdf_url}")
 
-    # Step 3: Log PDF metadata + URL to Notion
-    notion_page = log_pdf_briefing_to_notion(pdf_path, period, pdf_url)
-    logging.info(f"Logged PDF briefing to Notion: {notion_page.get('id')}")
+    # Step 3: Log PDF metadata to Notion (WITHOUT tweet URL initially)
+    notion_page = log_pdf_briefing_to_notion(
+        pdf_path=pdf_path, 
+        period=period, 
+        pdf_url=pdf_url
+        # tweet_url will be added later after posting to Twitter
+    )
+    notion_page_id = notion_page.get('id')
+    logging.info(f"Logged PDF briefing to Notion: {notion_page_id}")
 
     # Step 4: Fetch market data blocks for sentiment tweet
     equity_block, macro_block, crypto_block = get_market_blocks(period)
 
-    # Step 5: Post PDF briefing to X (Twitter)
-    timed_post_pdf_briefing(
-        pdf_path,
-        period=period,
-        equity_block=equity_block,
-        macro_block=macro_block,
-        crypto_block=crypto_block,
-        pdf_url=pdf_url
-    )
+    # Step 5: Post to Twitter and get the tweet URL
+    try:
+        tweet_response = timed_post_pdf_briefing(
+            filepath=pdf_path,
+            period=period,
+            headline=f"{period.capitalize()} Market Briefing",
+            equity_block=equity_block,
+            macro_block=macro_block,
+            crypto_block=crypto_block,
+            pdf_url=pdf_url
+        )
+        
+        # Extract tweet URL from response
+        if tweet_response and hasattr(tweet_response, 'data'):
+            tweet_id = tweet_response.data.get('id')
+            tweet_url = f"https://twitter.com/i/web/status/{tweet_id}"
+            
+            # Step 6: Update Notion with the actual tweet URL
+            if notion_page_id and tweet_url:
+                from utils.notion_helper import update_briefing_tweet_url
+                update_briefing_tweet_url(notion_page_id, tweet_url)
+                logging.info(f"Updated Notion with tweet URL: {tweet_url}")
+        
+    except Exception as e:
+        logging.error(f"Failed to post to Twitter or update Notion: {e}")
+
+    return pdf_path
 
 def fetch_crypto_block() -> dict:
     """Fetch crypto prices using unified client"""
