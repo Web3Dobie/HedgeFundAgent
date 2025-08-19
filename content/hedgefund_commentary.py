@@ -21,6 +21,8 @@ from utils.hourly_utils import (
     get_unused_headline_today_for_hourly,
     mark_headline_used_in_hourly_commentary,
 )
+# NEW: Import Notion logging function
+from utils.notion_helper import log_hedgefund_tweet_to_notion
 
 logger = logging.getLogger("hedgefund_commentary")
 
@@ -163,7 +165,64 @@ def post_hedgefund_comment():
 
     logger.info(f"Using theme: {theme}")
     logger.info(f"Using category: {category}")
-    post_tweet(tweet, category=category, theme=theme)
+    
+    # === NEW: Enhanced post_tweet call with Notion logging ===
+    try:
+        # Post the tweet and get response
+        response = post_tweet(tweet, category=category, theme=theme)
+        
+        # Check if we got a successful response with tweet data
+        if response and hasattr(response, 'data') and response.data:
+            tweet_id = response.data.get('id')
+            tweet_url = f"https://twitter.com/i/web/status/{tweet_id}"
+            
+            logger.info(f"✅ Posted hedge fund commentary: {tweet_id}")
+            
+            # Log to Notion database
+            notion_success = log_hedgefund_tweet_to_notion(
+                tweet_id=tweet_id,
+                tweet_text=tweet,
+                tweet_url=tweet_url,
+                tweet_type="hedge_fund_commentary",
+                likes=0,  # Initial values
+                retweets=0,
+                replies=0
+            )
+            
+            if notion_success:
+                logger.info(f"✅ Logged tweet {tweet_id} to HedgeFund Notion database")
+            else:
+                logger.warning(f"⚠️ Failed to log tweet {tweet_id} to Notion")
+                
+        elif response and isinstance(response, dict) and response.get('data'):
+            # Handle different response format
+            tweet_data = response['data']
+            tweet_id = tweet_data.get('id')
+            tweet_url = f"https://twitter.com/i/web/status/{tweet_id}"
+            
+            logger.info(f"✅ Posted hedge fund commentary: {tweet_id}")
+            
+            # Log to Notion database
+            notion_success = log_hedgefund_tweet_to_notion(
+                tweet_id=tweet_id,
+                tweet_text=tweet,
+                tweet_url=tweet_url,
+                tweet_type="hedge_fund_commentary"
+            )
+            
+            if notion_success:
+                logger.info(f"✅ Logged tweet {tweet_id} to HedgeFund Notion database")
+            else:
+                logger.warning(f"⚠️ Failed to log tweet {tweet_id} to Notion")
+        else:
+            logger.warning("Tweet posted but no tweet ID returned - cannot log to Notion")
+            
+    except Exception as e:
+        logger.error(f"Error posting hedge fund commentary: {str(e)}")
+        # Don't return here - still mark headline as used and track theme
+    
+    # === End Enhanced Posting ===
+    
     mark_headline_used_in_hourly_commentary(headline["headline"])
     track_theme(theme)
     logger.info(f"\\u2705 Posted hedge fund commentary tweet: {tweet}")
