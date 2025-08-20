@@ -4,6 +4,7 @@ import finnhub
 import logging
 import inspect
 import pandas as pd
+import traceback
 
 from datetime import datetime, timedelta
 from utils.text_utils import (
@@ -70,13 +71,9 @@ else:
     finnhub_client = None
     logger.warning("⚠️ Finnhub API key not configured")
 
-# content/briefings.py - Enhanced run_briefing function with comprehensive logging
-
-# content/briefings.py - Enhanced run_briefing function with comprehensive logging
-
 def run_briefing(period: str, test_mode: bool = False):
     """
-    Main briefing function with comprehensive logging for X posting troubleshooting
+    Main briefing function with comprehensive logging and market sentiment capture
     """
     logging.info(f"🚀 [BRIEFING START] Generating {period} market briefing PDF")
 
@@ -84,11 +81,17 @@ def run_briefing(period: str, test_mode: bool = False):
         # Step 1: Generate the PDF briefing
         logging.info(f"📄 [PDF GEN] Starting PDF generation for {period}")
         pdf_path = generate_briefing_pdf(period)
+        
+        # Extract market comment by calling the same logic that generate_briefing_pdf uses
+        market_comment = extract_market_sentiment_for_period(period)
+        
         logging.info(f"✅ [PDF GEN] PDF generated successfully: {pdf_path}")
+        logging.info(f"💭 [SENTIMENT] Market comment generated: {market_comment[:100] if market_comment else 'None'}...")
         
         if test_mode:
             logging.info(f"🧪 [TEST MODE] Skipping upload/posting - PDF created at {pdf_path}")
             print(f"✅ Test mode: PDF created at {pdf_path}")
+            print(f"📊 Market comment: {market_comment}")
             return pdf_path
         
         # Step 2: Upload to Azure Blob Storage
@@ -99,9 +102,14 @@ def run_briefing(period: str, test_mode: bool = False):
         pdf_url = upload_pdf_to_blob(pdf_path, blob_name)
         logging.info(f"✅ [BLOB UPLOAD] Uploaded PDF to Azure Blob Storage: {pdf_url}")
 
-        # Step 3: Log PDF metadata + URL to Notion
-        logging.info(f"📝 [NOTION] Starting Notion logging")
-        notion_page = log_pdf_briefing_to_notion(pdf_path, period, pdf_url)
+        # Step 3: Log PDF metadata + URL + market sentiment to Notion
+        logging.info(f"📝 [NOTION] Starting Notion logging with market sentiment")
+        notion_page = log_pdf_briefing_to_notion(
+            pdf_path=pdf_path, 
+            period=period, 
+            pdf_url=pdf_url,
+            market_sentiment=market_comment
+        )
         notion_id = notion_page.get('id') if notion_page else 'UNKNOWN'
         logging.info(f"✅ [NOTION] Logged PDF briefing to Notion: {notion_id}")
 
@@ -182,6 +190,35 @@ def run_briefing(period: str, test_mode: bool = False):
         logging.error(f"❌ [BRIEFING ERROR] Critical error in run_briefing: {e}")
         logging.error(f"❌ [BRIEFING ERROR] Traceback: {traceback.format_exc()}")
         raise
+
+def extract_market_sentiment_for_period(briefing_type: str) -> str:
+    """
+    Extract the market sentiment comment for a given period without generating the full PDF.
+    This replicates the logic from generate_briefing_pdf to get just the comment.
+    
+    Args:
+        briefing_type (str): The briefing period type
+        
+    Returns:
+        str: The generated market sentiment comment
+    """
+    try:
+        # ─── Build Market Data Blocks (same logic as generate_briefing_pdf) ───────────────────
+        equity_block, macro_block, crypto_block = get_market_blocks(briefing_type)
+
+        # Convert US Treasury futures prices to yields in both blocks
+        equity_block = convert_us_treasury_yields(equity_block)
+        macro_block = convert_us_treasury_yields(macro_block)
+
+        # ─── GPT Comment Block (same logic as generate_briefing_pdf) ────────────────────────────
+        combined_prices = {**equity_block, **macro_block, **crypto_block}
+        comment = generate_gpt_comment(combined_prices, briefing_type)
+        
+        return comment
+        
+    except Exception as e:
+        logging.error(f"❌ [SENTIMENT EXTRACT] Failed to extract market sentiment: {e}")
+        return f"Market analysis for {briefing_type} unavailable due to processing error."
 
 def fetch_crypto_block() -> dict:
     """Fetch crypto prices using your market data client"""
@@ -429,7 +466,6 @@ def generate_briefing_pdf_robust(briefing_type: str = "morning") -> str:
         
     except Exception as e:
         logger.error(f"❌ PDF rendering failed: {e}")
-        import traceback
         traceback.print_exc()
         raise
 
@@ -663,7 +699,6 @@ def test_morning_briefing():
         
     except Exception as e:
         print(f"❌ Test failed: {e}")
-        import traceback
         traceback.print_exc()
         return None
 
