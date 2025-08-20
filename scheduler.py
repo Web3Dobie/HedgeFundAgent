@@ -2,6 +2,7 @@ import sys, io, logging
 import os
 import time
 import traceback
+import threading
 from datetime import datetime, timezone
 from functools import partial, wraps
 
@@ -13,6 +14,10 @@ from content.hedgefund_deep_dive import post_hedgefund_deep_dive
 from content.briefings import run_briefing
 from utils import fetch_and_score_headlines, rotate_logs
 from utils.tg_notifier import send_telegram_message
+
+# NEW IMPORTS for HedgeFund News Integration
+from hedgefund_news_bridge import generate_hedgefund_news_for_website
+from hedgefund_http_server import start_hedgefund_news_server
 
 load_dotenv()
 
@@ -126,11 +131,64 @@ def telegram_job_wrapper(job_name: str):
         return wrapper
     return decorator
 
+# NEW FUNCTION: HTTP Server Background Thread
+def start_hedgefund_news_server_in_background():
+    """Start the HedgeFund news HTTP server in a background thread"""
+    try:
+        start_hedgefund_news_server(port=3002)
+    except Exception as e:
+        send_telegram_log(f"HedgeFund news HTTP server failed to start: {e}", "ERROR")
+        send_crash_alert(f"HTTP server startup failed: {str(e)}\n{traceback.format_exc()}", "SERVER STARTUP ERROR")
+
+# NEW FUNCTION: Market Hours Check for Optional Frequent Updates
+def is_market_hours():
+    """Check if current time is during US market hours (9:30 AM - 4:00 PM ET)"""
+    try:
+        import pytz
+        et = pytz.timezone('US/Eastern')
+        now = datetime.now(et)
+        
+        # Check if it's a weekday (Monday=0, Sunday=6)
+        if now.weekday() >= 5:  # Saturday or Sunday
+            return False
+        
+        # Check if it's during market hours
+        market_open = now.replace(hour=9, minute=30, second=0, microsecond=0)
+        market_close = now.replace(hour=16, minute=0, second=0, microsecond=0)
+        
+        return market_open <= now <= market_close
+    except ImportError:
+        # If pytz not available, default to simple time check
+        now = datetime.now()
+        # Assume EST/EDT and weekday
+        if now.weekday() >= 5:
+            return False
+        market_open = now.replace(hour=14, minute=30, second=0, microsecond=0)  # 9:30 AM ET = 2:30 PM UTC approx
+        market_close = now.replace(hour=21, minute=0, second=0, microsecond=0)   # 4:00 PM ET = 9:00 PM UTC approx
+        return market_open <= now <= market_close
+
+# NEW FUNCTION: Market Hours News Updates
+def hedgefund_news_market_hours():
+    """Generate hedge fund news if during market hours"""
+    if is_market_hours():
+        generate_hedgefund_news_for_website()
+        logging.info("📊 Market hours hedge fund news update completed")
+    else:
+        logging.info("⏰ Outside market hours - skipping frequent hedge fund news update")
+
 print("🕒 HedgeFund Investor Scheduler is live. Waiting for scheduled posts…")
 sys.stdout.flush()
 
+# NEW: Start HTTP server in background thread
+print("🌐 Starting HedgeFund news HTTP server...")
+hedgefund_http_thread = threading.Thread(target=start_hedgefund_news_server_in_background, daemon=True)
+hedgefund_http_thread.start()
+
+# Add a small delay to let the server start
+time.sleep(3)
+
 # Send startup notification
-send_telegram_log("HedgeFund Scheduler Started 💰\nAll scheduled jobs are now active", "SUCCESS")
+send_telegram_log("HedgeFund Scheduler Started 💰\nAll scheduled jobs are now active\n🌐 HTTP server running on port 3002", "SUCCESS")
 
 # --- Schedule Jobs with Enhanced Telegram Logging ---
 
@@ -138,6 +196,17 @@ send_telegram_log("HedgeFund Scheduler Started 💰\nAll scheduled jobs are now 
 schedule.every().hour.at(":30").do(
     telegram_job_wrapper("fetch_and_score_headlines")(fetch_and_score_headlines)
 )
+
+# NEW: HedgeFund News Website Generation
+schedule.every().hour.at(":25").do(
+    telegram_job_wrapper("hedgefund_news_website")(generate_hedgefund_news_for_website)
+)
+
+# NEW: Optional - More frequent updates during market hours (every 30 minutes)
+# Uncomment the next 3 lines if you want more frequent updates during trading hours
+# schedule.every(30).minutes.do(
+#     telegram_job_wrapper("hedgefund_news_market_hours")(hedgefund_news_market_hours)
+# )
 
 # --- Daily Hedge Fund Commentary Tweets ---
 for hour in range(9, 21, 3):  # 9am, 12am, 3pm, 6pm, 9pm
@@ -186,7 +255,8 @@ try:
                 next_job = schedule.next_run()
                 next_job_str = next_job.strftime('%H:%M') if next_job else "None"
                 
-                heartbeat_msg = f"HedgeFund Scheduler Alive 💓\n📊 Jobs: {pending_jobs} active\n⏰ Next: {next_job_str}"
+                # NEW: Include HTTP server status in heartbeat
+                heartbeat_msg = f"HedgeFund Scheduler Alive 💓\n📊 Jobs: {pending_jobs} active\n⏰ Next: {next_job_str}\n🌐 HTTP: Port 3002 active"
                 send_telegram_log(heartbeat_msg, "HEARTBEAT")
                 last_heartbeat = current_time
                 
@@ -194,7 +264,7 @@ try:
             
         except KeyboardInterrupt:
             logging.info("⏹️ Scheduler shutdown requested")
-            send_telegram_log("HedgeFund Scheduler Shutdown ⏹️\nManual stop requested", "WARNING")
+            send_telegram_log("HedgeFund Scheduler Shutdown ⏹️\nManual stop requested\n🌐 HTTP server will stop", "WARNING")
             break
             
         except Exception as e:
@@ -208,3 +278,7 @@ except Exception as fatal_error:
     logging.critical(fatal_msg)
     send_crash_alert(fatal_msg, "FATAL ERROR")
     raise
+
+# NEW: Cleanup message when scheduler stops (if we reach here)
+finally:
+    send_telegram_log("HedgeFund Scheduler Stopped 🛑\nAll services have been terminated", "WARNING")
