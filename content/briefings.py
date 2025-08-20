@@ -70,78 +70,117 @@ else:
     finnhub_client = None
     logger.warning("⚠️ Finnhub API key not configured")
 
+# content/briefings.py - Enhanced run_briefing function with comprehensive logging
+
+# content/briefings.py - Enhanced run_briefing function with comprehensive logging
+
 def run_briefing(period: str, test_mode: bool = False):
     """
-    Main briefing function for IG API + yfinance architecture
+    Main briefing function with comprehensive logging for X posting troubleshooting
     """
-    logger.info(f"🚀 Starting {period} market briefing generation")
+    logging.info(f"🚀 [BRIEFING START] Generating {period} market briefing PDF")
 
     try:
         # Step 1: Generate the PDF briefing
-        pdf_path = generate_briefing_pdf_robust(period)
+        logging.info(f"📄 [PDF GEN] Starting PDF generation for {period}")
+        pdf_path = generate_briefing_pdf(period)
+        logging.info(f"✅ [PDF GEN] PDF generated successfully: {pdf_path}")
         
         if test_mode:
+            logging.info(f"🧪 [TEST MODE] Skipping upload/posting - PDF created at {pdf_path}")
             print(f"✅ Test mode: PDF created at {pdf_path}")
             return pdf_path
         
         # Step 2: Upload to Azure Blob Storage
-        try:
-            blob_name = os.path.basename(pdf_path)
-            pdf_url = upload_pdf_to_blob(pdf_path, blob_name)
-            logger.info(f"✅ Uploaded PDF to Azure Blob Storage: {pdf_url}")
-        except Exception as e:
-            logger.error(f"❌ Azure upload failed: {e}")
-            pdf_url = "Upload failed"
+        logging.info(f"☁️ [BLOB UPLOAD] Starting Azure blob upload")
+        blob_name = os.path.basename(pdf_path)
+        logging.info(f"☁️ [BLOB UPLOAD] Blob name: {blob_name}")
+        
+        pdf_url = upload_pdf_to_blob(pdf_path, blob_name)
+        logging.info(f"✅ [BLOB UPLOAD] Uploaded PDF to Azure Blob Storage: {pdf_url}")
 
-        # Step 3: Log PDF metadata to Notion
-        try:
-            notion_page = log_pdf_briefing_to_notion(
-                pdf_path=pdf_path, 
-                period=period, 
-                pdf_url=pdf_url
-            )
-            notion_page_id = notion_page.get('id')
-            logger.info(f"✅ Logged PDF briefing to Notion: {notion_page_id}")
-        except Exception as e:
-            logger.error(f"❌ Notion logging failed: {e}")
-            notion_page_id = None
+        # Step 3: Log PDF metadata + URL to Notion
+        logging.info(f"📝 [NOTION] Starting Notion logging")
+        notion_page = log_pdf_briefing_to_notion(pdf_path, period, pdf_url)
+        notion_id = notion_page.get('id') if notion_page else 'UNKNOWN'
+        logging.info(f"✅ [NOTION] Logged PDF briefing to Notion: {notion_id}")
 
-        # Step 4: Post to Twitter
+        # Step 4: Fetch market data blocks for sentiment tweet
+        logging.info(f"📊 [MARKET DATA] Fetching market data blocks for {period}")
         try:
             equity_block, macro_block, crypto_block = get_market_blocks(period)
+            logging.info(f"✅ [MARKET DATA] Fetched blocks - Equity: {len(equity_block)} items, "
+                        f"Macro: {len(macro_block)} items, Crypto: {len(crypto_block)} items")
+        except Exception as e:
+            logging.error(f"❌ [MARKET DATA] Failed to fetch market blocks: {e}")
+            # Set empty blocks as fallback
+            equity_block, macro_block, crypto_block = {}, {}, {}
+
+        # Step 5: VERIFY X POSTING SETUP
+        logging.info(f"🔍 [X VERIFY] Verifying X posting configuration...")
+        
+        # Import the verification function
+        from utils.x_post import verify_x_posting_before_briefing
+        
+        x_verify_ok = verify_x_posting_before_briefing(period)
+        if not x_verify_ok:
+            logging.error(f"❌ [X VERIFY] X posting verification failed - skipping X posting")
+            logging.info(f"🎯 [BRIEFING COMPLETE] Briefing completed WITHOUT X posting due to config issues")
+            return pdf_path
+
+        # Step 6: POST TO X (TWITTER) - This is where the issue likely occurs
+        logging.info(f"🐦 [X POST] ==================== STARTING X POSTING ====================")
+        logging.info(f"🐦 [X POST] Period: {period}")
+        logging.info(f"🐦 [X POST] PDF Path: {pdf_path}")
+        logging.info(f"🐦 [X POST] PDF URL: {pdf_url}")
+        logging.info(f"🐦 [X POST] Equity block size: {len(equity_block)}")
+        logging.info(f"🐦 [X POST] Macro block size: {len(macro_block)}")
+        logging.info(f"🐦 [X POST] Crypto block size: {len(crypto_block)}")
+        
+        # Check if PDF file exists before posting
+        if not os.path.exists(pdf_path):
+            logging.error(f"❌ [X POST] PDF file does not exist: {pdf_path}")
+            return pdf_path
+        
+        logging.info(f"✅ [X POST] PDF file exists, size: {os.path.getsize(pdf_path)} bytes")
+        
+        try:
+            # Call the X posting function with detailed logging
+            logging.info(f"🐦 [X POST] Calling timed_post_pdf_briefing...")
             
-            tweet_response = timed_post_pdf_briefing(
+            result = timed_post_pdf_briefing(
                 filepath=pdf_path,
                 period=period,
-                headline=f"{period.capitalize()} Market Briefing",
+                headline=None,  # Let function generate
+                summary=None,   # Let function generate
                 equity_block=equity_block,
                 macro_block=macro_block,
                 crypto_block=crypto_block,
                 pdf_url=pdf_url
             )
             
-            # Extract tweet URL and update Notion
-            if tweet_response and hasattr(tweet_response, 'data'):
-                tweet_id = tweet_response.data.get('id')
-                tweet_url = f"https://twitter.com/i/web/status/{tweet_id}"
-                
-                if notion_page_id and tweet_url:
-                    try:
-                        from utils.notion_helper import update_briefing_tweet_url
-                        update_briefing_tweet_url(notion_page_id, tweet_url)
-                        logger.info(f"✅ Updated Notion with tweet URL: {tweet_url}")
-                    except Exception as e:
-                        logger.error(f"❌ Notion tweet URL update failed: {e}")
+            logging.info(f"✅ [X POST] timed_post_pdf_briefing completed. Result: {result}")
+            
+            # Check the result and log accordingly
+            if result == "SUCCESS":
+                logging.info(f"🎉 [X POST] X posting completed successfully!")
+            else:
+                logging.warning(f"⚠️ [X POST] X posting returned: {result}")
+            
+            logging.info(f"🐦 [X POST] ==================== X POSTING COMPLETE ====================")
             
         except Exception as e:
-            logger.error(f"❌ Twitter posting failed: {e}")
-
+            logging.error(f"❌ [X POST] Exception in timed_post_pdf_briefing: {e}")
+            logging.error(f"❌ [X POST] Traceback: {traceback.format_exc()}")
+            logging.info(f"🐦 [X POST] ==================== X POSTING FAILED ====================")
+            # Don't re-raise - let briefing complete even if X posting fails
+        
+        logging.info(f"🎯 [BRIEFING COMPLETE] All steps completed for {period} briefing")
         return pdf_path
-
+        
     except Exception as e:
-        logger.error(f"❌ Briefing generation completely failed: {e}")
-        import traceback
-        traceback.print_exc()
+        logging.error(f"❌ [BRIEFING ERROR] Critical error in run_briefing: {e}")
+        logging.error(f"❌ [BRIEFING ERROR] Traceback: {traceback.format_exc()}")
         raise
 
 def fetch_crypto_block() -> dict:

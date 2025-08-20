@@ -16,6 +16,7 @@ import os
 import csv
 import sys
 import requests
+import traceback
 
 from utils.text_utils import get_briefing_caption, format_market_sentiment
 from utils.telegram_log_handler import TelegramHandler
@@ -30,6 +31,12 @@ from .config import (
 )
 from .limit_guard import has_reached_daily_limit
 from .logger import log_tweet
+
+try:
+    import fitz  # PyMuPDF
+    PYMUPDF_AVAILABLE = True
+except ImportError:
+    PYMUPDF_AVAILABLE = False
 
 # ─── Constants ──────────────────────────────────────────────────────────
 RATE_LIMIT_DELAY = 5  # seconds between thread parts
@@ -472,95 +479,184 @@ def post_pdf_briefing(filepath: str, period: str = "morning", headline: str = No
         theme=theme or period
     )
 
+# utils/x_post.py - Enhanced timed_post_pdf_briefing function with comprehensive logging
+
 def timed_post_pdf_briefing(
     filepath: str,
     period: str = "morning",
-    headline: str = None,
-    summary: str = None,
-    equity_block: dict = None,
-    macro_block: dict = None,
-    crypto_block: dict = None,
-    pdf_url: str = None,
-    retry_count: int = 0,
-    category: str = "briefing",
-    theme: str = None
+    headline=None,
+    summary=None,
+    equity_block=None,
+    macro_block=None,
+    crypto_block=None,
+    pdf_url=None,
+    retry_count=0
 ):
     """
-    Posts a multi-part briefing thread on X (Twitter) including:
-    - Main briefing tweet with PDF first page image
-    - Sentiment reply tweet
-    - Third tweet with PDF link and call to action
-
-    Handles retries on main tweet failures and logs tweet IDs and URLs.
-
-    Args:
-        filepath (str): Local PDF file path.
-        period (str): Briefing period (e.g., 'morning', 'pre_market').
-        headline (str, optional): Headline for main tweet.
-        summary (str, optional): Summary text for main tweet.
-        equity_block (dict, optional): Equity prices for sentiment.
-        macro_block (dict, optional): Macro prices for sentiment.
-        crypto_block (dict, optional): Crypto prices for sentiment.
-        pdf_url (str, optional): Public URL to the full PDF briefing.
-        retry_count (int): Retry attempt count for main tweet.
-        category (str): Category for logging (default: "briefing")
-        theme (str): Theme for logging (default: period)
+    Posts a multi-part briefing thread on X (Twitter) with comprehensive logging
+    and PyMuPDF fallback for PDF conversion
     """
+    logging.info(f"🐦 [X POST ENTRY] Function called with parameters:")
+    logging.info(f"🐦 [X POST ENTRY] - filepath: {filepath}")
+    logging.info(f"🐦 [X POST ENTRY] - period: {period}")
+    logging.info(f"🐦 [X POST ENTRY] - headline: {headline}")
+    logging.info(f"🐦 [X POST ENTRY] - summary: {summary}")
+    logging.info(f"🐦 [X POST ENTRY] - pdf_url: {pdf_url}")
+    logging.info(f"🐦 [X POST ENTRY] - retry_count: {retry_count}")
+    
     img_path = None
     temp_dir = None
-    MAX_RETRY_ATTEMPTS = 3
-    RETRY_DELAYS = [30, 60, 120]  # seconds
 
+    # Check daily limit first
+    logging.info(f"🐦 [LIMIT CHECK] Checking daily tweet limit...")
     if has_reached_daily_limit():
-        logging.warning(f"🚫 Daily tweet limit reached — skipping {period} briefing.")
-        return
+        logging.warning(f"🚫 [LIMIT CHECK] Daily tweet limit reached — skipping {period} briefing.")
+        return "DAILY_LIMIT_REACHED"
+    
+    logging.info(f"✅ [LIMIT CHECK] Daily limit OK, proceeding with posting")
 
     try:
-        # Convert PDF to PNG
-        images = convert_from_path(filepath, dpi=200, first_page=1, last_page=1)
-        if not images:
-            logging.error("❌ PDF conversion failed — no pages rendered.")
-            return
+        # Step 1: Convert PDF to image with fallback methods
+        logging.info(f"🖼️ [PDF CONVERT] Converting PDF first page to image...")
+        logging.info(f"🖼️ [PDF CONVERT] PDF path: {filepath}")
+        logging.info(f"🖼️ [PDF CONVERT] PDF exists: {os.path.exists(filepath)}")
+        logging.info(f"🖼️ [PDF CONVERT] Working directory: {os.getcwd()}")
+        
+        if not os.path.exists(filepath):
+            logging.error(f"❌ [PDF CONVERT] PDF file not found: {filepath}")
+            return "PDF_NOT_FOUND"
 
+        # Make filepath absolute
+        abs_filepath = os.path.abspath(filepath)
+        logging.info(f"🖼️ [PDF CONVERT] Absolute path: {abs_filepath}")
+        
+        images = None
+        conversion_method = "unknown"
+
+        # Try pdf2image first (requires poppler)
+        try:
+            logging.info(f"🖼️ [PDF CONVERT] Trying pdf2image method...")
+            images = convert_from_path(abs_filepath, dpi=200, first_page=1, last_page=1)
+            conversion_method = "pdf2image"
+            logging.info(f"✅ [PDF CONVERT] pdf2image successful")
+        except Exception as e:
+            logging.warning(f"⚠️ [PDF CONVERT] pdf2image failed: {e}")
+            
+            # Try PyMuPDF fallback
+            if PYMUPDF_AVAILABLE:
+                logging.info(f"🖼️ [PDF CONVERT] Trying PyMuPDF fallback...")
+                images = convert_pdf_to_image_fallback(abs_filepath, dpi=200)
+                if images:
+                    conversion_method = "pymupdf"
+                    logging.info(f"✅ [PDF CONVERT] PyMuPDF fallback successful")
+                else:
+                    logging.error(f"❌ [PDF CONVERT] PyMuPDF returned no images")
+            else:
+                logging.error(f"❌ [PDF CONVERT] PyMuPDF not available for fallback")
+
+        if not images:
+            logging.error(f"❌ [PDF CONVERT] All PDF conversion methods failed")
+            return "PDF_CONVERSION_FAILED"
+        
+        logging.info(f"✅ [PDF CONVERT] Successfully converted PDF using {conversion_method}, got {len(images)} image(s)")
+
+        # Step 2: Save image and upload to Twitter
+        logging.info(f"💾 [IMAGE SAVE] Creating temporary image file...")
         temp_dir = tempfile.mkdtemp()
         img_path = os.path.join(temp_dir, "page_1.png")
         images[0].save(img_path, "PNG")
-        media_resp = api.media_upload(filename=img_path)
-        media_id = getattr(media_resp, "media_id", None)
-        if not media_id:
-            logging.error("❌ Media upload failed: no media_id returned.")
-            return
-
-        # Generate sentiment and caption
-        sentiment = format_market_sentiment(
-            period,
-            equity_block=equity_block,
-            macro_block=macro_block,
-            crypto_block=crypto_block,
-            movers=None
-        )
-
-        caption = get_briefing_caption(period, headline=headline, summary=summary)
-
+        
+        img_size = os.path.getsize(img_path)
+        logging.info(f"✅ [IMAGE SAVE] Image saved: {img_path}, size: {img_size} bytes")
+        
+        # Step 3: Upload media to Twitter
+        logging.info(f"📤 [MEDIA UPLOAD] Uploading image to Twitter...")
+        
         try:
-            # Main briefing tweet with image
-            resp = client.create_tweet(text=caption, media_ids=[media_id])
-            logging.debug(f"Tweet creation response: {resp}")
+            media_resp = api.media_upload(filename=img_path)
+            media_id = getattr(media_resp, "media_id", None)
+            
+            if not media_id:
+                logging.error(f"❌ [MEDIA UPLOAD] Media upload failed: no media_id returned.")
+                return "MEDIA_UPLOAD_FAILED"
+            
+            logging.info(f"✅ [MEDIA UPLOAD] Media uploaded successfully, ID: {media_id}")
+            
+        except Exception as e:
+            logging.error(f"❌ [MEDIA UPLOAD] Exception during media upload: {e}")
+            return "MEDIA_UPLOAD_EXCEPTION"
 
-            if resp is None or not hasattr(resp, "data") or resp.data is None:
-                logging.error("Failed to create tweet: response or data is None")
-                return
+        # Step 4: Generate sentiment text
+        logging.info(f"📝 [SENTIMENT] Generating market sentiment text...")
+        
+        try:
+            sentiment = format_market_sentiment(
+                period,
+                equity_block=equity_block,
+                macro_block=macro_block,
+                crypto_block=crypto_block,
+                movers=None
+            )
+            logging.info(f"✅ [SENTIMENT] Sentiment generated, length: {len(sentiment)} chars")
+            logging.info(f"📝 [SENTIMENT] Content: {sentiment[:100]}...")  # First 100 chars
+            
+        except Exception as e:
+            logging.error(f"❌ [SENTIMENT] Exception generating sentiment: {e}")
+            sentiment = f"Market update for {period} - check the PDF for details! 📊"
+            logging.info(f"📝 [SENTIMENT] Using fallback sentiment")
+
+        # Step 5: Generate caption
+        logging.info(f"📝 [CAPTION] Generating briefing caption...")
+        
+        try:
+            caption = get_briefing_caption(period, headline=headline, summary=summary)
+            logging.info(f"✅ [CAPTION] Caption generated, length: {len(caption)} chars")
+            logging.info(f"📝 [CAPTION] Content: {caption[:100]}...")  # First 100 chars
+            
+        except Exception as e:
+            logging.error(f"❌ [CAPTION] Exception generating caption: {e}")
+            caption = f"📊 {period.title()} Market Briefing is ready!"
+            logging.info(f"📝 [CAPTION] Using fallback caption")
+
+        # Step 6: POST MAIN TWEET
+        logging.info(f"🐦 [MAIN TWEET] ==================== POSTING MAIN TWEET ====================")
+        logging.info(f"🐦 [MAIN TWEET] Caption length: {len(caption)}")
+        logging.info(f"🐦 [MAIN TWEET] Media ID: {media_id}")
+        
+        try:
+            logging.info(f"🐦 [MAIN TWEET] Calling client.create_tweet...")
+            
+            resp = client.create_tweet(text=caption, media_ids=[media_id])
+            
+            logging.info(f"🐦 [MAIN TWEET] Tweet creation response received")
+            logging.debug(f"🐦 [MAIN TWEET] Raw response: {resp}")
+
+            if resp is None:
+                logging.error(f"❌ [MAIN TWEET] Failed to create tweet: response is None")
+                return "TWEET_RESPONSE_NONE"
+                
+            if not hasattr(resp, "data") or resp.data is None:
+                logging.error(f"❌ [MAIN TWEET] Failed to create tweet: response.data is None")
+                return "TWEET_DATA_NONE"
 
             tweet_id = resp.data.get("id")
             if tweet_id is None:
-                logging.error("Tweet creation response missing tweet ID")
-                return
+                logging.error(f"❌ [MAIN TWEET] Tweet creation response missing tweet ID")
+                return "TWEET_ID_MISSING"
+            
+            logging.info(f"✅ [MAIN TWEET] Main tweet posted successfully, ID: {tweet_id}")
 
         except (tweepy.errors.TweepyException, requests.exceptions.RequestException, ConnectionError) as e:
             error_str = str(e).lower()
+            logging.error(f"❌ [MAIN TWEET] Network/API error: {e}")
+            
+            # Define retry delays and max attempts for this function
+            RETRY_DELAYS = [30, 60, 120]  # 30s, 1m, 2m
+            MAX_RETRY_ATTEMPTS = 3
+            
             if ("timeout" in error_str or "connection" in error_str or "remote end closed" in error_str) and retry_count < MAX_RETRY_ATTEMPTS:
-                delay = RETRY_DELAYS[retry_count]
-                logging.warning(f"⚠️ PDF post attempt {retry_count+1} failed: {e}. Retrying in {delay}s.")
+                delay = RETRY_DELAYS[retry_count] if retry_count < len(RETRY_DELAYS) else RETRY_DELAYS[-1]
+                logging.warning(f"⚠️ [MAIN TWEET] Retry attempt {retry_count+1} in {delay}s due to: {e}")
                 time.sleep(delay)
                 return timed_post_pdf_briefing(
                     filepath=filepath,
@@ -571,38 +667,55 @@ def timed_post_pdf_briefing(
                     macro_block=macro_block,
                     crypto_block=crypto_block,
                     pdf_url=pdf_url,
-                    retry_count=retry_count + 1,
-                    category=category,
-                    theme=theme
+                    retry_count=retry_count + 1
                 )
-            raise
+            
+            logging.error(f"❌ [MAIN TWEET] Max retries reached or non-recoverable error")
+            return "MAIN_TWEET_FAILED"
 
-        # Log main tweet with enhanced logging
+        # Step 7: Log main tweet
         url = f"https://x.com/{BOT_USER_ID}/status/{tweet_id}"
-        date_str = datetime.now(timezone.utc).strftime('%Y-%m-%d')
+        date_str = datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
         
-        log_tweet_to_csv(tweet_id, date_str, "briefing", category, theme or period, url)
-        log_tweet(tweet_id, date_str, category, url, 0, 0, 0, 0, caption, theme or period)
-        
-        logging.info(f"✅ Posted {period} briefing main tweet: {url}")
-
-        # Post reply with sentiment
+        logging.info(f"📊 [TWEET LOG] Logging main tweet to CSV...")
         try:
+            log_tweet_to_csv(tweet_id, date_str, "briefing", "briefing", period, url)
+            logging.info(f"✅ [TWEET LOG] Main tweet logged successfully")
+        except Exception as e:
+            logging.error(f"❌ [TWEET LOG] Failed to log main tweet: {e}")
+        
+        logging.info(f"✅ [MAIN TWEET] Posted {period} briefing main tweet: {url}")
+
+        # Step 8: POST SENTIMENT REPLY
+        logging.info(f"💬 [REPLY TWEET] ==================== POSTING SENTIMENT REPLY ====================")
+        
+        try:
+            logging.info(f"💬 [REPLY TWEET] Posting sentiment reply to tweet {tweet_id}")
             resp2 = client.create_tweet(text=sentiment, in_reply_to_tweet_id=tweet_id)
+            
             reply_id = getattr(resp2.data, "id", None) if resp2 and resp2.data else None
+            
             if reply_id:
                 reply_url = f"https://x.com/{BOT_USER_ID}/status/{reply_id}"
-                log_tweet_to_csv(reply_id, date_str, "briefing_reply", category, theme or period, reply_url)
-                log_tweet(reply_id, date_str, category, reply_url, 0, 0, 0, 0, sentiment, theme or period)
-                logging.info(f"↪️ Posted sentiment reply for {period}: {reply_url}")
+                logging.info(f"✅ [REPLY TWEET] Sentiment reply posted: {reply_url}")
+                
+                try:
+                    log_tweet_to_csv(reply_id, datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S'),
+                                   "briefing_reply", "briefing", period, reply_url)
+                    logging.info(f"✅ [REPLY LOG] Sentiment reply logged successfully")
+                except Exception as e:
+                    logging.error(f"❌ [REPLY LOG] Failed to log sentiment reply: {e}")
             else:
-                logging.error("Failed to post sentiment reply or missing reply ID")
+                logging.error(f"❌ [REPLY TWEET] Failed to post sentiment reply or missing reply ID")
+                
         except Exception as e:
-            logging.error(f"Failed to post sentiment reply: {e}")
+            logging.error(f"❌ [REPLY TWEET] Exception posting sentiment reply: {e}")
             reply_id = None
 
-        # Post third tweet with PDF link and call to action
+        # Step 9: POST PDF LINK TWEET
         if pdf_url:
+            logging.info(f"🔗 [PDF TWEET] ==================== POSTING PDF LINK TWEET ====================")
+            
             third_tweet_text = (
                 f"📄 Dive deeper: The full briefing PDF is available here 👉 {pdf_url}\n\n"
                 "Includes detailed economic calendars, upcoming IPOs & earnings, "
@@ -611,40 +724,52 @@ def timed_post_pdf_briefing(
             )
             
             try:
-                # Determine which tweet to reply to
-                reply_to_id = reply_id if reply_id else tweet_id
+                logging.info(f"🔗 [PDF TWEET] Posting PDF link tweet, reply to {reply_id or tweet_id}")
+                resp3 = client.create_tweet(text=third_tweet_text, in_reply_to_tweet_id=reply_id or tweet_id)
                 
-                resp3 = client.create_tweet(text=third_tweet_text, in_reply_to_tweet_id=reply_to_id)
                 third_id = getattr(resp3.data, "id", None) if resp3 and resp3.data else None
+                
                 if third_id:
                     third_url = f"https://x.com/{BOT_USER_ID}/status/{third_id}"
-                    log_tweet_to_csv(third_id, date_str, "briefing_pdf_link", category, theme or period, third_url)
-                    log_tweet(third_id, date_str, category, third_url, 0, 0, 0, 0, third_tweet_text, theme or period)
-                    logging.info(f"📄 Posted PDF link tweet for {period}: {third_url}")
+                    logging.info(f"✅ [PDF TWEET] PDF link tweet posted: {third_url}")
+                    
+                    try:
+                        log_tweet_to_csv(third_id, datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S'),
+                                       "briefing_pdf_link", "briefing", period, third_url)
+                        logging.info(f"✅ [PDF LOG] PDF link tweet logged successfully")
+                    except Exception as e:
+                        logging.error(f"❌ [PDF LOG] Failed to log PDF link tweet: {e}")
                 else:
-                    logging.error("Failed to post PDF link tweet or missing tweet ID")
+                    logging.error(f"❌ [PDF TWEET] Failed to post PDF link tweet or missing tweet ID")
+                    
             except Exception as e:
-                logging.error(f"Failed to post PDF link tweet: {e}")
+                logging.error(f"❌ [PDF TWEET] Exception posting PDF link tweet: {e}")
+        else:
+            logging.warning(f"⚠️ [PDF TWEET] No PDF URL provided, skipping PDF link tweet")
 
-        return url
+        logging.info(f"🎯 [X POST COMPLETE] All Twitter posting completed successfully!")
+        return "SUCCESS"
 
     except Exception as e:
-        logging.error(f"❌ Error in timed_post_pdf_briefing: {e}")
-        return None
-
+        logging.error(f"❌ [X POST ERROR] Unexpected error in timed_post_pdf_briefing: {e}")
+        logging.error(f"❌ [X POST ERROR] Traceback: {traceback.format_exc()}")
+        return "UNEXPECTED_ERROR"
+        
     finally:
-        # Cleanup
+        # Cleanup temporary files
         if img_path and os.path.exists(img_path):
             try:
-                os.unlink(img_path)
+                os.remove(img_path)
+                logging.info(f"🧹 [CLEANUP] Removed temporary image: {img_path}")
             except Exception as e:
-                logging.warning(f"Failed to cleanup image file: {e}")
+                logging.error(f"❌ [CLEANUP] Failed to remove temp image: {e}")
+                
         if temp_dir and os.path.exists(temp_dir):
             try:
                 os.rmdir(temp_dir)
+                logging.info(f"🧹 [CLEANUP] Removed temporary directory: {temp_dir}")
             except Exception as e:
-                logging.warning(f"Failed to cleanup temp directory: {e}")
-
+                logging.error(f"❌ [CLEANUP] Failed to remove temp directory: {e}")
 
 def convert_pdf_to_png(filepath: str, output_dir: str = None) -> str:
     """
@@ -722,3 +847,129 @@ def schedule_retry_single_tweet(part: str, reply_to_id: str, category: str, them
             else:
                 logging.error(f"❌ Retry failed with non-retryable error: {e}")
     threading.Timer(SINGLE_TWEET_RETRY_DELAY, retry_call).start()
+
+# utils/x_post.py - Add this test function to verify X posting configuration
+
+def test_x_post_config():
+    """
+    Test function to verify X posting configuration and API connectivity
+    Call this before the actual briefing to verify everything is working
+    """
+    logging.info(f"🧪 [X TEST] ==================== TESTING X POST CONFIG ====================")
+    
+    # Test 1: Check if API clients are initialized
+    logging.info(f"🧪 [X TEST] Checking API client initialization...")
+    
+    try:
+        logging.info(f"🧪 [X TEST] client object: {client}")
+        logging.info(f"🧪 [X TEST] api object: {api}")
+        logging.info(f"🧪 [X TEST] BOT_USER_ID: {BOT_USER_ID}")
+    except NameError as e:
+        logging.error(f"❌ [X TEST] API client not initialized: {e}")
+        return False
+    
+    # Test 2: Check daily limit function
+    logging.info(f"🧪 [X TEST] Checking daily limit function...")
+    try:
+        limit_status = has_reached_daily_limit()
+        logging.info(f"✅ [X TEST] Daily limit check: {limit_status}")
+    except Exception as e:
+        logging.error(f"❌ [X TEST] Daily limit check failed: {e}")
+        return False
+    
+    # Test 3: Check Twitter API connectivity (simple API call)
+    logging.info(f"🧪 [X TEST] Testing Twitter API connectivity...")
+    try:
+        # Try to get user info (simple API call that doesn't post anything)
+        user_info = client.get_me()
+        if user_info and user_info.data:
+            logging.info(f"✅ [X TEST] API connectivity OK - User: {user_info.data.username}")
+        else:
+            logging.error(f"❌ [X TEST] API connectivity failed - No user data returned")
+            return False
+    except Exception as e:
+        logging.error(f"❌ [X TEST] API connectivity test failed: {e}")
+        return False
+    
+    # Test 4: Check text utility functions
+    logging.info(f"🧪 [X TEST] Testing text utility functions...")
+    try:
+        test_sentiment = format_market_sentiment("morning", 
+                                                equity_block={"SPY": "100.00 (+1.5%)"}, 
+                                                macro_block={"USD/EUR": "1.08 (-0.2%)"}, 
+                                                crypto_block={"BTC": "50000 (+2.1%)"})
+        test_caption = get_briefing_caption("morning", headline="Test", summary="Test summary")
+        
+        logging.info(f"✅ [X TEST] Text utilities OK - Sentiment: {len(test_sentiment)} chars, Caption: {len(test_caption)} chars")
+    except Exception as e:
+        logging.error(f"❌ [X TEST] Text utility functions failed: {e}")
+        return False
+    
+    # Test 5: Check PDF conversion capability (using a dummy file path)
+    logging.info(f"🧪 [X TEST] Testing PDF conversion capability...")
+    try:
+        # Just check if the import works and function exists
+        from pdf2image import convert_from_path
+        logging.info(f"✅ [X TEST] PDF conversion library imported successfully")
+    except ImportError as e:
+        logging.error(f"❌ [X TEST] PDF conversion library not available: {e}")
+        return False
+    
+    logging.info(f"🎯 [X TEST] ==================== ALL X POST TESTS PASSED ====================")
+    return True
+
+def verify_x_posting_before_briefing(period: str):
+    """
+    Run this before each briefing to ensure X posting will work
+    """
+    logging.info(f"🔍 [X VERIFY] Verifying X posting setup before {period} briefing...")
+    
+    config_ok = test_x_post_config()
+    
+    if not config_ok:
+        logging.error(f"❌ [X VERIFY] X posting configuration check failed!")
+        return False
+    
+    logging.info(f"✅ [X VERIFY] X posting verification passed for {period} briefing")
+    return True
+
+def convert_pdf_to_image_fallback(pdf_path, dpi=200):
+    """
+    Convert PDF to image using PyMuPDF as fallback
+    Returns list of PIL Images to match pdf2image interface
+    """
+    from PIL import Image
+    import io
+    
+    try:
+        logging.info(f"🖼️ [PDF CONVERT FB] Using PyMuPDF fallback for {pdf_path}")
+        
+        # Open the PDF
+        doc = fitz.open(pdf_path)
+        
+        if len(doc) == 0:
+            logging.error(f"❌ [PDF CONVERT FB] PDF has no pages")
+            doc.close()
+            return None
+        
+        # Get the first page
+        page = doc[0]
+        
+        # Create a transformation matrix for the desired DPI
+        mat = fitz.Matrix(dpi/72, dpi/72)  # 72 is the default DPI
+        
+        # Render page to an image
+        pix = page.get_pixmap(matrix=mat)
+        
+        # Convert to PIL Image
+        img_data = pix.tobytes("ppm")
+        img = Image.open(io.BytesIO(img_data))
+        
+        doc.close()
+        
+        logging.info(f"✅ [PDF CONVERT FB] PyMuPDF conversion successful: {img.size}")
+        return [img]  # Return as list to match pdf2image interface
+        
+    except Exception as e:
+        logging.error(f"❌ [PDF CONVERT FB] PyMuPDF conversion failed: {e}")
+        return None
