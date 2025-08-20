@@ -102,7 +102,7 @@ class HedgeFundNewsProcessor:
                             score = 0
                         
                         # Filter for relevant categories and minimum score
-                        category = row.get('category', '').lower()
+                        category = row.get('ticker', '').lower()
                         if category in ['macro', 'equity', 'political'] and score >= 6:
                             
                             # Extract source from URL
@@ -164,7 +164,7 @@ class HedgeFundNewsProcessor:
     
     def process_and_export(self):
         """Process recent headlines and export for website API"""
-        logger.info("🔄 Processing top 4 hedge fund headlines for DutchBrat rotation...")
+        logger.info("🔄 Processing top 10 hedge fund headlines for DutchBrat rotation...")
         
         # Get recent headlines from past 2 hours
         headlines = self.get_recent_headlines(hours=2)
@@ -182,13 +182,13 @@ class HedgeFundNewsProcessor:
                 "data": [],
                 "lastUpdated": datetime.now().isoformat(),
                 "message": "No recent hedge fund news available",
-                "rotationSchedule": "20min intervals",
+                "rotationSchedule": "2min intervals",
                 "categories": ["macro", "equity", "political"]
             }
         else:
-            # Generate DutchBrat comments for top 4 headlines
+            # Generate DutchBrat comments for top 10 headlines
             processed_news = []
-            for headline_data in headlines[:4]:  # Top 4 for 20-min rotation
+            for headline_data in headlines[:10]:  # Top 10 for 2-min rotation
                 dutchbrat_comment = self.generate_dutchbrat_comment(
                     headline_data['headline'], 
                     headline_data['category']
@@ -209,7 +209,7 @@ class HedgeFundNewsProcessor:
                 "data": processed_news,
                 "lastUpdated": datetime.now().isoformat(),
                 "totalHeadlines": len(headlines),
-                "rotationSchedule": "20min intervals",
+                "rotationSchedule": "2min intervals",
                 "categories": list(set(h['category'] for h in headlines)),
                 "message": f"Top {len(processed_news)} hedge fund headlines ready for rotation"
             }
