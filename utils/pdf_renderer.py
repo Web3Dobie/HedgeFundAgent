@@ -413,7 +413,7 @@ def render_block(equity_block, macro_block, crypto_block, side_block, comment, p
     pdf.line(margin_x, y_comment_start, margin_x + box_width_total, y_comment_start)
 
     # Robot image bottom left
-    pdf.image("content/assets/AI Hedge Fund Analyst - resized for pdf.png", x=margin_x + 2, y=y_bottom + 4, w=45)
+    pdf.image("content/assets/HTD_Research_Logo.png", x=margin_x + 2, y=y_bottom + 4, w=45)
 
     # Crypto block bottom right
     keys_crypto = list(crypto_block.keys())
