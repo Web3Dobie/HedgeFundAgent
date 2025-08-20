@@ -1,8 +1,7 @@
-# utils/logger.py - Enhanced to work with notion_helper.py
+# utils/logger.py - Simplified for HedgeFund database only
 
 """
-Logger utility for recording tweet metrics to CSV and Notion.
-Updated to work with existing notion_helper.py structure.
+Logger utility for recording tweet metrics to CSV and HedgeFund Notion database.
 """
 
 import csv
@@ -27,7 +26,7 @@ TWEET_LOG = os.path.join(DATA_DIR, "tweet_log.csv")
 
 def log_tweet(tweet_id, date, tweet_category, url, likes, retweets, replies, engagement_score, tweet_text=None, theme=None):
     """
-    ENHANCED: Append tweet metrics to a CSV and log to main Notion database via notion_helper.
+    Append tweet metrics to CSV and log to HedgeFund Notion database.
     
     Args:
         tweet_id: Twitter ID of the tweet
@@ -56,27 +55,26 @@ def log_tweet(tweet_id, date, tweet_category, url, likes, retweets, replies, eng
         ])
     logging.info(f"Logged tweet {tweet_id} with category '{tweet_category}', theme '{theme}' to {TWEET_LOG}")
 
-    # Try logging to main Notion database via notion_helper
+    # Log to HedgeFund Notion database
     try:
-        from .notion_helper import log_main_tweet_to_notion
-        success = log_main_tweet_to_notion(
+        from .notion_helper import log_hedgefund_tweet_to_notion
+        success = log_hedgefund_tweet_to_notion(
             tweet_id=tweet_id,
             tweet_text=tweet_text or "",
             tweet_url=url,
-            tweet_category=tweet_category,
-            tweet_theme=theme,
+            tweet_type=tweet_category,
             likes=likes,
             retweets=retweets,
             replies=replies
         )
         if success:
-            logging.info(f"Logged tweet {tweet_id} with category '{tweet_category}', theme '{theme}' to main Notion database")
+            logging.info(f"✅ Logged tweet {tweet_id} with category '{tweet_category}' to HedgeFund Notion database")
         else:
-            logging.warning(f"Failed to log tweet {tweet_id} to main Notion database")
-    except ImportError:
-        logging.warning("notion_helper.log_main_tweet_to_notion function not available")
+            logging.warning(f"⚠️ Failed to log tweet {tweet_id} to HedgeFund Notion database")
+    except ImportError as e:
+        logging.error(f"❌ Import error: {e}")
     except Exception as e:
-        logging.error(f"[ALERT] Main Notion log failed for tweet {tweet_id}: {e}")
+        logging.error(f"❌ HedgeFund Notion log failed for tweet {tweet_id}: {e}")
 
 
 # Backward compatibility functions
