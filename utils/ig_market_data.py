@@ -43,7 +43,7 @@ class IGRateLimitError(IGMarketDataError):
 IG_EPIC_MAPPING = {
     # US EQUITY (all working)
     "^GSPC": "IX.D.SPTRD.DAILY.IP",
-    "^IXIC": "IX.D.NASDAQ.DAILY.IP", 
+    "^IXIC": "IX.D.NASDAQ.CASH.IP", 
     "^DJI": "IX.D.DOW.DAILY.IP",
     "^RUT": "IX.D.RUSSELL.DAILY.IP",
     
@@ -56,8 +56,8 @@ IG_EPIC_MAPPING = {
     # ASIA EQUITY (all working)
     "^N225": "IX.D.NIKKEI.DAILY.IP",
     "^HSI": "IX.D.HANGSENG.DAILY.IP",
-    #"000001.SS": "IX.D.XINHUA.DAILY.IP",
-    #"^KS11": "IX.D.KOSPI.DAILY.IP",
+    "000001.SS": "IX.D.XINHUA.DFB.IP",
+    "^KS11": "IX.D.EMGMKT.DFB.IP",
     
     # FOREX (all working)
     "EURUSD=X": "CS.D.EURUSD.TODAY.IP",
