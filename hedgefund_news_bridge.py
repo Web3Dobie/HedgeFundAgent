@@ -164,15 +164,15 @@ class HedgeFundNewsProcessor:
     
     def process_and_export(self):
         """Process recent headlines and export for website API"""
-        logger.info("🔄 Processing top 10 hedge fund headlines for DutchBrat rotation...")
+        logger.info("🔄 Processing top 10 hedge fund headlines from past hour for DutchBrat rotation...")
         
-        # Get recent headlines from past 2 hours
-        headlines = self.get_recent_headlines(hours=2)
+        # Get recent headlines from past hour
+        headlines = self.get_recent_headlines(hours=1)
         
         if not headlines:
-            logger.info("⚠️ No headlines found in past 2 hours, expanding to 6 hours...")
-            # Fallback to last 6 hours if no recent headlines
-            headlines = self.get_recent_headlines(hours=6)
+            logger.info("⚠️ No headlines found in past hour, expanding to 2 hours...")
+            # Fallback to last 2 hours if no recent headlines
+            headlines = self.get_recent_headlines(hours=2)
         
         if not headlines:
             logger.warning("⚠️ No recent hedge fund headlines found")
@@ -181,7 +181,7 @@ class HedgeFundNewsProcessor:
                 "success": True,
                 "data": [],
                 "lastUpdated": datetime.now().isoformat(),
-                "message": "No recent hedge fund news available",
+                "message": "No recent hedge fund news from past hour available",
                 "rotationSchedule": "2min intervals",
                 "categories": ["macro", "equity", "political"]
             }
@@ -211,7 +211,7 @@ class HedgeFundNewsProcessor:
                 "totalHeadlines": len(headlines),
                 "rotationSchedule": "2min intervals",
                 "categories": list(set(h['category'] for h in headlines)),
-                "message": f"Top {len(processed_news)} hedge fund headlines ready for rotation"
+                "message": f"Top {len(processed_news)} hedge fund headlines from past hour ready for rotation"
             }
         
         # Save to JSON file that the website API can read
